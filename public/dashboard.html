@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard — AttendFix</title><link rel="stylesheet" href="/css/app.css"></head>
+<body>
+<div class="app"><nav class="sidebar" id="sidebar"></nav>
+<div class="main-content"><div class="page-body">
+  <div id="root"><div class="loading">Loading…</div></div>
+</div></div></div>
+<script src="/js/app.js"></script>
+<script>
+(async () => {
+  const user  = await buildSidebar('dashboard');
+  const isHOD = ['HOD','HR','ADMIN'].includes(user.role);
+
+  if (!isHOD) {
+    const [stats, missing] = await Promise.all([api('GET','/api/stats'), api('GET','/api/attendance/missing')]);
+    const { records } = await api('GET','/api/attendance?limit=10');
+
+    const missingAlert = missing.length ? `
+      <div class="alert warn">
+        <svg class="alert-ico" viewBox="0 0 24 24" fill="none" stroke="var(--amber-d)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/></svg>
+        <div style="flex:1">
+          <div class="alert-ttl">${missing.length} missing record${missing.length>1?'s':''} — action needed</div>
+          <div class="alert-txt">${missing.map(m=>`${fmtDate(m.date)} — ${m.clock_in?'clock-out':'clock-in'} missing${m.req_status?' ('+m.req_status.toLowerCase()+')'  :''}`).join(' · ')}</div>
+        </div>
+        <a href="/my-attendance" class="btn btn-ghost btn-sm">Submit correction →</a>
+      </div>` : `<div class="alert success" style="margin-bottom:20px">
+        <svg class="alert-ico" viewBox="0 0 24 24" fill="none" stroke="var(--green-d)" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+        <div><div class="alert-ttl">All good!</div><div class="alert-txt">No missing records in the past 30 days.</div></div>
+      </div>`;
+
+    document.getElementById('root').innerHTML = `
+      <div class="page-title">Welcome back, ${user.name} 👋</div>
+      <div class="page-sub" style="margin-bottom:20px">${user.department} · ${user.staff_id}</div>
+      ${missingAlert}
+      <div class="stats">
+        <div class="stat"><div class="stat-val" style="color:var(--green)">${stats.complete}</div><div class="stat-label">Complete days this month</div></div>
+        <div class="stat"><div class="stat-val" style="color:var(--red)">${stats.missing}</div><div class="stat-label">Missing records</div></div>
+        <div class="stat"><div class="stat-val" style="color:var(--amber)">${stats.pendingReqs}</div><div class="stat-label">Pending corrections</div></div>
+        <div class="stat"><div class="stat-val" style="color:var(--text3);font-size:16px">HR Sync</div><div class="stat-label">Data source</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Recent attendance</span><a href="/my-attendance" class="btn btn-ghost btn-sm">View all</a></div>
+        <div class="card-body" style="padding:0">
+          ${records.length ? `<table><thead><tr><th>Date</th><th>Clock In</th><th>Clock Out</th><th>Source</th><th>Status</th></tr></thead><tbody>
+            ${records.map(r=>`<tr>
+              <td style="font-weight:500">${fmtDate(r.date)}</td>
+              <td style="font-variant-numeric:tabular-nums">${r.clock_in?r.clock_in.slice(0,5):'<span style="color:var(--red)">—</span>'}</td>
+              <td style="font-variant-numeric:tabular-nums">${r.clock_out?r.clock_out.slice(0,5):'<span style="color:var(--red)">—</span>'}</td>
+              <td><span style="font-size:11px;color:var(--text3)">${r.source}</span></td>
+              <td>${attendanceBadge(r)}</td>
+            </tr>`).join('')}
+          </tbody></table>` : '<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">No records imported yet.<br>HR sync runs nightly — or trigger it manually from the HR Sync page.</div></div>'}
+        </div>
+      </div>`;
+  } else {
+    const [stats, pending] = await Promise.all([api('GET','/api/hod/stats'), api('GET','/api/hod/corrections/pending')]);
+    document.getElementById('root').innerHTML = `
+      <div class="page-title">Welcome, ${user.name} 👋</div>
+      <div class="page-sub" style="margin-bottom:20px">${user.role} · ${user.department}</div>
+      ${pending.length ? `<div class="alert warn">
+        <svg class="alert-ico" viewBox="0 0 24 24" fill="none" stroke="var(--amber-d)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        <div style="flex:1"><div class="alert-ttl">${pending.length} correction request${pending.length>1?'s':''} awaiting your approval</div></div>
+        <a href="/hod/approvals" class="btn btn-ghost btn-sm">Review →</a>
+      </div>` : ''}
+      ${stats.hrPendingSync > 0 ? `<div class="alert info" style="margin-bottom:16px">
+        <svg class="alert-ico" viewBox="0 0 24 24" fill="none" stroke="var(--blue-d)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        <div style="flex:1"><div class="alert-ttl">${stats.hrPendingSync} approved correction${stats.hrPendingSync>1?'s':''} pending HR write-back</div>
+        <div class="alert-txt">These will be retried automatically every 2 hours.</div></div>
+        <a href="/hr/sync" class="btn btn-ghost btn-sm">View sync log →</a>
+      </div>` : ''}
+      <div class="stats">
+        <div class="stat"><div class="stat-val" style="color:var(--amber)">${stats.pending}</div><div class="stat-label">Pending approvals</div></div>
+        <div class="stat"><div class="stat-val">${stats.teamSize}</div><div class="stat-label">Team members</div></div>
+        <div class="stat"><div class="stat-val" style="color:var(--red)">${stats.missingCount}</div><div class="stat-label">Team missing records</div></div>
+        <div class="stat"><div class="stat-val" style="color:var(--${stats.hrPendingSync>0?'amber':'green'})">${stats.hrPendingSync}</div><div class="stat-label">Awaiting HR write-back</div></div>
+      </div>
+      <div class="card"><div class="card-header"><span class="card-title">Quick actions</span></div>
+        <div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap">
+          <a href="/hod/approvals" class="btn btn-primary">Review approvals</a>
+          <a href="/hod/team" class="btn btn-ghost">Team attendance</a>
+          <a href="/hr/sync" class="btn btn-ghost">HR sync</a>
+        </div>
+      </div>`;
+  }
+})();
+</script></body></html>

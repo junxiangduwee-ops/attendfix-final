@@ -1,0 +1,27 @@
+{
+  "name": "attendfix",
+  "version": "3.0.0",
+  "description": "MR DIY HR Attendance Correction System",
+  "main": "server.js",
+  "scripts": {
+    "start":       "node server.js",
+    "dev":         "node server.js",
+    "db:migrate":  "node scripts/db.js migrate",
+    "db:seed":     "node scripts/db.js seed",
+    "db:reset":    "node scripts/db.js reset",
+    "db:status":   "node scripts/db.js status"
+  },
+  "dependencies": {
+    "bcryptjs":       "^2.4.3",
+    "cookie-parser":  "^1.4.6",
+    "csv-parse":      "^5.5.5",
+    "dotenv":         "^16.4.5",
+    "express":        "^4.18.3",
+    "express-session":"^1.18.0",
+    "knex":           "^3.1.0",
+    "multer":         "^1.4.5-lts.1",
+    "node-cron":      "^3.0.3",
+    "nodemailer":     "^6.9.12",
+    "pg":             "^8.11.3"
+  }
+}

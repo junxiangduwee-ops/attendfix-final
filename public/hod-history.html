@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Approval History — AttendFix</title><link rel="stylesheet" href="/css/app.css"></head>
+<body>
+<div class="app"><nav class="sidebar" id="sidebar"></nav>
+<div class="main-content"><div class="page-body">
+  <div class="page-title">Approval history</div>
+  <div class="page-sub">All correction decisions</div>
+  <div class="card"><div class="card-body" style="padding:0"><div id="root"><div class="loading">Loading…</div></div></div></div>
+</div></div></div>
+<script src="/js/app.js"></script>
+<script>
+(async()=>{
+  await buildSidebar('hod-history');
+  const all = await api('GET','/api/hod/corrections/all');
+  if (!all.length) { document.getElementById('root').innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">No requests yet.</div></div>'; return; }
+  document.getElementById('root').innerHTML=`
+    <table>
+      <thead><tr><th>Employee</th><th>Date</th><th>Missing</th><th>Proposed</th><th>Submitted</th><th>Decided</th><th>Status</th></tr></thead>
+      <tbody>
+        ${all.map(r=>`<tr>
+          <td><div style="font-weight:600">${r.employee_name}</div><div style="font-size:11px;color:var(--text3)">${r.staff_id}</div></td>
+          <td>${fmtDate(r.date)}</td>
+          <td>${r.fieldMissing.replace('_',' ')}</td>
+          <td style="font-family:monospace;font-weight:600">${r.proposedTime}</td>
+          <td style="font-size:12px;color:var(--text3)">${fmtDateTime(r.createdAt)}</td>
+          <td style="font-size:12px;color:var(--text3)">${r.decidedAt?fmtDateTime(r.decidedAt):'—'}</td>
+          <td>${statusBadge(r.status)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+})();
+</script>
+</body></html>

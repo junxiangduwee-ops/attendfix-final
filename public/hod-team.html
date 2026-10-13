@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Team Attendance — AttendFix</title><link rel="stylesheet" href="/css/app.css"></head>
+<body>
+<div class="app"><nav class="sidebar" id="sidebar"></nav>
+<div class="main-content"><div class="page-body">
+  <div class="page-title">Team attendance</div>
+  <div class="page-sub">Monitor your team's records</div>
+  <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center">
+    <input type="date" class="input" id="fromDate" style="width:auto" value="2026-10-06">
+    <span style="color:var(--text3)">to</span>
+    <input type="date" class="input" id="toDate" style="width:auto" value="2026-10-12">
+    <button class="btn btn-ghost btn-sm" onclick="loadTeam()">Filter</button>
+  </div>
+  <div class="card"><div class="card-body" style="padding:0"><div id="root"><div class="loading">Loading…</div></div></div></div>
+</div></div></div>
+<script src="/js/app.js"></script>
+<script>
+async function loadTeam() {
+  const from = document.getElementById('fromDate').value;
+  const to = document.getElementById('toDate').value;
+  const rows = await api('GET',`/api/hod/team/attendance?from=${from}&to=${to}`);
+  if (!rows.length) { document.getElementById('root').innerHTML='<div class="empty"><div class="empty-icon">👥</div><div class="empty-text">No records in this range.</div></div>'; return; }
+
+  // Group by employee
+  const byEmp = {};
+  rows.forEach(r => {
+    if (!byEmp[r.id]) byEmp[r.id] = { name:r.name, staff_id:r.staff_id, days:{} };
+    if (r.date) byEmp[r.id].days[r.date] = r;
+  });
+
+  // Get all unique dates
+  const dates = [...new Set(rows.filter(r=>r.date).map(r=>r.date))].sort();
+
+  document.getElementById('root').innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Employee</th>
+          ${dates.map(d=>`<th>${new Date(d+'T00:00').toLocaleDateString('en-MY',{weekday:'short',day:'numeric',month:'short'})}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${Object.values(byEmp).map(emp=>`
+          <tr>
+            <td><div style="font-weight:600">${emp.name}</div><div style="font-size:11px;color:var(--text3)">${emp.staff_id}</div></td>
+            ${dates.map(d=>{
+              const day = emp.days[d];
+              if (!day) return '<td><span style="color:var(--text3)">—</span></td>';
+              return `<td>${attendanceBadge(day)}<div style="font-size:10px;color:var(--text3);margin-top:3px">${day.clockIn||'?'}–${day.clockOut||'?'}</div></td>`;
+            }).join('')}
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+(async()=>{ await buildSidebar('hod-team'); await loadTeam(); })();
+</script>
+</body></html>

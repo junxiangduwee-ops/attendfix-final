@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HR Sync — AttendFix</title><link rel="stylesheet" href="/css/app.css"></head>
+<body>
+<div class="app"><nav class="sidebar" id="sidebar"></nav>
+<div class="main-content"><div class="page-body">
+  <div class="page-title">HR system sync</div>
+  <div class="page-sub">Manage data flow between the HR system and AttendFix</div>
+
+  <div class="alert info" style="margin-bottom:24px">
+    <svg class="alert-ico" viewBox="0 0 24 24" fill="none" stroke="var(--blue-d)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+    <div>
+      <div class="alert-ttl">Adapter mode: <span id="adapterMode" style="font-family:monospace">loading…</span></div>
+      <div class="alert-txt">To switch from mock to your real HR system, set <code>HR_ADAPTER=api</code> in <code>.env</code> and implement the three functions in <code>src/integrations/hrAdapter.js</code>.</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+    <div class="card" style="margin-bottom:0">
+      <div class="card-header"><span class="card-title">⬇ Pull from HR</span></div>
+      <div class="card-body">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Fetch attendance records from the HR system for a specific date. Runs automatically at 01:00 daily.</p>
+        <div class="form-group">
+          <label class="label">Date to pull</label>
+          <input type="date" class="input" id="pullDate" value="${new Date().toISOString().slice(0,10)}">
+        </div>
+        <button class="btn btn-primary" id="pullBtn" onclick="triggerPull()">Pull now</button>
+        <div id="pullResult" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:0">
+      <div class="card-header"><span class="card-title">🔍 Detect missing records</span></div>
+      <div class="card-body">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Scan for employees with missing clock-in or clock-out and notify them. Runs automatically at 23:45 daily.</p>
+        <div class="form-group">
+          <label class="label">Date to check</label>
+          <input type="date" class="input" id="detectDate" value="${new Date().toISOString().slice(0,10)}">
+        </div>
+        <button class="btn btn-ghost" id="detectBtn" onclick="triggerDetect()">Detect now</button>
+        <div id="detectResult" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:0">
+      <div class="card-header"><span class="card-title">📤 CSV upload</span></div>
+      <div class="card-body">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Fallback: manually upload a CSV exported from your HR or biometric system.</p>
+        <div class="import-zone" onclick="document.getElementById('csvFile').click()" style="border:2px dashed var(--border2);border-radius:var(--r);padding:24px;text-align:center;cursor:pointer">
+          <div style="font-size:28px;margin-bottom:6px">📁</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text2)">Drop CSV here or click to browse</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">Columns: staff_id, date, clock_in, clock_out</div>
+        </div>
+        <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="uploadCSV(this)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+          <a href="/api/hr/import/template" class="btn btn-ghost btn-sm">⬇ Download template</a>
+          <span id="csvStatus" style="font-size:12px;color:var(--text3)"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:0">
+      <div class="card-header"><span class="card-title">🔄 Retry failed push-backs</span></div>
+      <div class="card-body">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Re-attempt pushing approved corrections that failed to write back to the HR system. Retries automatically every 2 hours.</p>
+        <button class="btn btn-ghost" id="retryBtn" onclick="triggerRetry()">Retry failed push-backs</button>
+        <div id="retryResult" style="margin-top:12px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span class="card-title">Sync log</span><button class="btn btn-ghost btn-sm" onclick="loadSyncLog()">Refresh</button></div>
+    <div class="card-body" style="padding:0"><div id="syncLog"><div class="loading">Loading…</div></div></div>
+  </div>
+</div></div></div>
+<script src="/js/app.js"></script>
+<script>
+const todayISO = new Date().toISOString().slice(0,10);
+document.getElementById('pullDate').value   = todayISO;
+document.getElementById('detectDate').value = todayISO;
+
+(async () => {
+  await buildSidebar('hr-sync');
+  document.getElementById('adapterMode').textContent = '${process.env.HR_ADAPTER || "mock"}';
+  await loadSyncLog();
+})();
+
+async function triggerPull() {
+  const btn = document.getElementById('pullBtn');
+  btn.disabled=true; btn.textContent='Pulling…';
+  try {
+    const r = await api('POST','/api/hr/pull',{ date: document.getElementById('pullDate').value });
+    document.getElementById('pullResult').innerHTML = resultBadge(r.status, `${r.records_affected} records imported`);
+    await loadSyncLog();
+  } catch(e) { document.getElementById('pullResult').innerHTML = resultBadge('failed', e.message); }
+  btn.disabled=false; btn.textContent='Pull now';
+}
+
+async function triggerDetect() {
+  const btn = document.getElementById('detectBtn');
+  btn.disabled=true; btn.textContent='Detecting…';
+  try {
+    const r = await api('POST','/api/hr/detect-missing',{ date: document.getElementById('detectDate').value });
+    document.getElementById('detectResult').innerHTML = resultBadge('ok', `${r.notified} employees notified`);
+  } catch(e) { document.getElementById('detectResult').innerHTML = resultBadge('failed', e.message); }
+  btn.disabled=false; btn.textContent='Detect now';
+}
+
+async function triggerRetry() {
+  const btn = document.getElementById('retryBtn');
+  btn.disabled=true; btn.textContent='Retrying…';
+  try {
+    await api('POST','/api/hr/retry-pushes');
+    document.getElementById('retryResult').innerHTML = resultBadge('ok','Retry complete — check sync log');
+    await loadSyncLog();
+  } catch(e) { document.getElementById('retryResult').innerHTML = resultBadge('failed', e.message); }
+  btn.disabled=false; btn.textContent='Retry failed push-backs';
+}
+
+async function uploadCSV(input) {
+  const file = input.files[0]; if(!file) return;
+  document.getElementById('csvStatus').textContent = 'Uploading…';
+  const form = new FormData(); form.append('file', file);
+  try {
+    const r = await fetch('/api/hr/import/csv',{method:'POST',body:form});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error);
+    document.getElementById('csvStatus').textContent = `✓ ${d.imported} imported, ${d.skipped} errors`;
+    await loadSyncLog();
+  } catch(e) { document.getElementById('csvStatus').textContent = '✗ '+e.message; }
+  input.value='';
+}
+
+async function loadSyncLog() {
+  try {
+    const rows = await api('GET','/api/hr/sync-log');
+    document.getElementById('syncLog').innerHTML = rows.length ? `
+      <table><thead><tr><th>Time</th><th>Direction</th><th>Status</th><th>Records</th><th>Detail</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td style="font-size:12px;color:var(--text3)">${fmtDateTime(r.created_at)}</td>
+        <td><span style="font-size:11px;font-weight:600;color:${r.direction==='pull'?'var(--blue-d)':'var(--green-d)'}">${r.direction==='pull'?'⬇ pull':'⬆ push'}</span></td>
+        <td>${r.status==='ok'?'<span class="badge ok">✓ ok</span>':r.status==='partial'?'<span class="badge pend">partial</span>':'<span class="badge miss">failed</span>'}</td>
+        <td style="font-weight:600">${r.records_affected}</td>
+        <td style="font-size:12px;color:var(--text2)">${r.detail||''}${r.error?'<br><span style="color:var(--red)">'+r.error+'</span>':''}</td>
+      </tr>`).join('')}</tbody></table>` : '<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">No sync activity yet.</div></div>';
+  } catch(e) { document.getElementById('syncLog').textContent='Error: '+e.message; }
+}
+
+function resultBadge(status, text) {
+  const color = status==='ok'?'var(--green)':status==='failed'?'var(--red)':'var(--amber)';
+  return `<div style="font-size:13px;color:${color};font-weight:500">${status==='ok'?'✓':status==='failed'?'✗':'!'} ${text}</div>`;
+}
+</script></body></html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>My Attendance — AttendFix</title>
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" id="sidebar"></nav>
+  <div class="main-content"><div class="page-body">
+    <div class="page-title">My attendance</div>
+    <div class="page-sub">View records and submit corrections</div>
+    <div id="missingSection"></div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Attendance log</span>
+        <div style="display:flex;gap:8px">
+          <input type="month" class="input" id="monthPicker" style="width:auto" value="2026-10">
+          <button class="btn btn-ghost btn-sm" onclick="loadAttendance()">Load</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0"><div id="attTable"><div class="loading">Loading…</div></div></div>
+    </div>
+  </div></div>
+</div>
+
+<!-- Correction Modal -->
+<div class="overlay" id="corrModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Submit correction request</div>
+      <div class="modal-sub" id="corrModalSub"></div>
+    </div>
+    <div class="modal-body">
+      <div class="time-boxes" id="corrTimeBoxes"></div>
+      <input type="hidden" id="corrDate">
+      <input type="hidden" id="corrField">
+      <div class="form-group">
+        <label class="label">Why did you not clock <span id="corrFieldLabel"></span>? <span class="req">*</span></label>
+        <textarea class="textarea" id="corrReason" placeholder="Describe what happened…" rows="3"></textarea>
+        <div class="field-err" id="errReason">Please provide a justification.</div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="label">Actual time <span class="req">*</span></label>
+          <input type="time" class="input" id="corrTime">
+          <div class="field-err" id="errTime">Please enter the actual time.</div>
+        </div>
+        <div class="form-group">
+          <label class="label">Supporting evidence</label>
+          <input type="text" class="input" id="corrEvidence" placeholder="Email ref, manager name…">
+          <div class="hint">Optional but helps HOD verify</div>
+        </div>
+      </div>
+      <div class="alert info" style="margin:0">
+        <svg class="alert-ico" viewBox="0 0 24 24" fill="none" stroke="var(--blue-d)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <div class="alert-txt">Your HOD will be notified by email and in-app to review this request. You'll be notified of the decision.</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('corrModal')">Cancel</button>
+      <button class="btn btn-primary" id="corrSubmitBtn" onclick="submitCorrection()">
+        <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+        Send to HOD for approval
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+let currentAtt = [];
+
+async function init() {
+  await buildSidebar('my-attendance');
+  await loadMissing();
+  await loadAttendance();
+}
+
+async function loadMissing() {
+  const missing = await api('GET', '/api/attendance/missing');
+  const sec = document.getElementById('missingSection');
+  if (!missing.length) { sec.innerHTML=''; return; }
+  sec.innerHTML = missing.map(m => {
+    const field     = m.clock_in ? 'clock_out' : 'clock_in';
+    const hasPending = m.req_status === 'PENDING';
+    return `
+    <div class="alert warn">
+      <svg class="alert-ico" viewBox="0 0 24 24" fill="none" stroke="var(--amber-d)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <div style="flex:1">
+        <div class="alert-ttl">Missing ${field.replace('_',' ')} — ${fmtDate(m.date)}</div>
+        <div class="alert-txt">${hasPending ? '⏳ Correction request pending HOD review.' : 'Submit a correction to fix this.'}</div>
+      </div>
+      ${!hasPending ? `<button class="btn btn-ghost btn-sm" onclick="openCorrection('${m.date}','${m.clock_in||''}','${m.clock_out||''}','${field}')">Fix →</button>` : ''}
+    </div>`;
+  }).join('');
+}
+
+async function loadAttendance() {
+  const month = document.getElementById('monthPicker').value;
+  const [y,m] = month.split('-');
+  const from = `${y}-${m}-01`;
+  const to = `${y}-${m}-31`;
+  const rows = await api('GET', `/api/attendance?from=${from}&to=${to}`);
+  currentAtt = rows;
+
+  if (!rows.length) {
+    document.getElementById('attTable').innerHTML = '<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">No records for this month.</div></div>';
+    return;
+  }
+
+  document.getElementById('attTable').innerHTML = `
+    <table>
+      <thead><tr><th>Date</th><th>Clock In</th><th>Clock Out</th><th>Source</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        ${rows.map(r => {
+          const needsFixIn  = !r.clock_in;
+          const needsFixOut = !r.clock_out;
+          return `<tr>
+            <td style="font-weight:500">${fmtDate(r.date)}</td>
+            <td style="font-variant-numeric:tabular-nums">${r.clock_in  ? r.clock_in.slice(0,5)  : '<span style="color:var(--red);font-weight:600">—</span>'}</td>
+            <td style="font-variant-numeric:tabular-nums">${r.clock_out ? r.clock_out.slice(0,5) : '<span style="color:var(--red);font-weight:600">—</span>'}</td>
+            <td><span style="font-size:11px;color:var(--text3)">${r.source||'HR_SYSTEM'}</span></td>
+            <td>${attendanceBadge(r)}</td>
+            <td>
+              ${needsFixIn  ? `<button class="btn btn-ghost btn-sm" onclick="openCorrection('${r.date}','','${r.clock_out||''}','clock_in')">Fix in</button>`  : ''}
+              ${needsFixOut ? `<button class="btn btn-ghost btn-sm" onclick="openCorrection('${r.date}','${r.clock_in||''}','','clock_out')">Fix out</button>` : ''}
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
+function openCorrection(date, clockIn, clockOut, field) {
+  document.getElementById('corrDate').value = date;
+  document.getElementById('corrField').value = field;
+  const label = field === 'clock_in' ? 'in' : 'out';
+  document.getElementById('corrFieldLabel').textContent = label;
+  document.getElementById('corrModalSub').textContent = fmtDate(date) + ' · ' + (field === 'clock_in' ? 'Clock-in missing' : 'Clock-out missing');
+  document.getElementById('corrReason').value = '';
+  document.getElementById('corrTime').value = '';
+  document.getElementById('corrEvidence').value = '';
+  ['errReason','errTime'].forEach(id => { document.getElementById(id).classList.remove('show'); });
+  ['corrReason','corrTime'].forEach(id => { document.getElementById(id).classList.remove('err'); });
+
+  document.getElementById('corrTimeBoxes').innerHTML = `
+    <div class="time-box ${clockIn?'recorded':'miss'}">
+      <div class="time-box-lbl">Clock in</div>
+      <div class="time-box-val">${clockIn||'—'}</div>
+      <div class="time-box-note">${clockIn?'Recorded':'Missing'}</div>
+    </div>
+    <div class="time-box ${clockOut?'recorded':'miss'}">
+      <div class="time-box-lbl">Clock out</div>
+      <div class="time-box-val">${clockOut||'—'}</div>
+      <div class="time-box-note">${clockOut?'Recorded':'Missing'}</div>
+    </div>`;
+  openModal('corrModal');
+}
+
+async function submitCorrection() {
+  let ok = true;
+  const reason = document.getElementById('corrReason').value.trim();
+  const time = document.getElementById('corrTime').value;
+  if (!reason) { document.getElementById('corrReason').classList.add('err'); document.getElementById('errReason').classList.add('show'); ok=false; }
+  if (!time)   { document.getElementById('corrTime').classList.add('err'); document.getElementById('errTime').classList.add('show'); ok=false; }
+  if (!ok) return;
+
+  const btn = document.getElementById('corrSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+
+  try {
+    await api('POST', '/api/corrections', {
+      date: document.getElementById('corrDate').value,
+      fieldMissing: document.getElementById('corrField').value,
+      proposedTime: time,
+      justification: reason,
+      evidence: document.getElementById('corrEvidence').value.trim()
+    });
+    closeModal('corrModal');
+    alert('✅ Correction request submitted! Your HOD has been notified.');
+    await loadMissing();
+    await loadAttendance();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg> Send to HOD for approval';
+  }
+}
+
+document.getElementById('corrModal').addEventListener('click', e => { if(e.target===e.currentTarget) closeModal('corrModal'); });
+init();
+</script>
+</body>
+</html>

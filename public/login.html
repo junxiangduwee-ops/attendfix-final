@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AttendFix — Login</title>
+<link rel="stylesheet" href="/css/app.css">
+<style>
+body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg)}
+.login-wrap{width:100%;max-width:400px;padding:24px}
+.login-logo{text-align:center;margin-bottom:32px}
+.login-logo-icon{width:52px;height:52px;border-radius:14px;background:var(--blue);display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px}
+.login-logo-icon svg{width:26px;height:26px;stroke:#fff;fill:none;stroke-width:2}
+.login-title{font-size:24px;font-weight:800;letter-spacing:-.5px;margin-bottom:4px}
+.login-sub{font-size:13px;color:var(--text2)}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;box-shadow:0 4px 24px rgba(16,24,40,.08)}
+.demo-creds{background:var(--blue-l);border:1px solid #84adff;border-radius:10px;padding:14px;margin-bottom:20px;font-size:12px}
+.demo-creds strong{display:block;color:var(--blue-d);margin-bottom:6px}
+.demo-row{display:flex;justify-content:space-between;margin-bottom:3px;color:var(--text2)}
+.demo-row:last-child{margin-bottom:0}
+.demo-row b{color:var(--text);font-family:monospace}
+.err-box{background:var(--red-l);border:1px solid #fda29b;border-radius:8px;padding:10px 12px;font-size:13px;color:var(--red-d);margin-bottom:14px;display:none}
+</style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-logo">
+    <div class="login-logo-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+    </div>
+    <div class="login-title">AttendFix</div>
+    <div class="login-sub">HR Attendance Correction System</div>
+  </div>
+  <div class="login-card">
+    <div class="demo-creds">
+      <strong>🎮 Demo accounts</strong>
+      <div class="demo-row"><span>Employee</span><b>employee@mrdiy.com / emp123</b></div>
+      <div class="demo-row"><span>HOD</span><b>hod@mrdiy.com / hod123</b></div>
+      <div class="demo-row"><span>HR</span><b>hr@mrdiy.com / hr123</b></div>
+    </div>
+    <div class="err-box" id="errBox"></div>
+    <div class="form-group">
+      <label class="label">Email address</label>
+      <input type="email" class="input" id="email" placeholder="you@company.com" autocomplete="email">
+    </div>
+    <div class="form-group">
+      <label class="label">Password</label>
+      <input type="password" class="input" id="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px" id="loginBtn" onclick="doLogin()">Sign in →</button>
+  </div>
+</div>
+<script>
+document.getElementById('password').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+async function doLogin() {
+  const btn = document.getElementById('loginBtn');
+  const err = document.getElementById('errBox');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  err.style.display = 'none';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email: document.getElementById('email').value, password: document.getElementById('password').value })
+    });
+    const d = await r.json();
+    if (!r.ok) { err.textContent = d.error; err.style.display='block'; btn.disabled=false; btn.textContent='Sign in →'; return; }
+    window.location.href = '/dashboard';
+  } catch(e) { err.textContent='Network error. Please try again.'; err.style.display='block'; btn.disabled=false; btn.textContent='Sign in →'; }
+}
+</script>
+</body>
+</html>
