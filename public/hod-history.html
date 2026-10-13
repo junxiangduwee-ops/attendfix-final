@@ -6,30 +6,107 @@
 <div class="app"><nav class="sidebar" id="sidebar"></nav>
 <div class="main-content"><div class="page-body">
   <div class="page-title">Approval history</div>
-  <div class="page-sub">All correction decisions</div>
+  <div class="page-sub" id="pageSub">All correction decisions</div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <select class="input" id="filterStatus" style="width:140px">
+        <option value="">All statuses</option>
+        <option value="PENDING">Pending</option>
+        <option value="APPROVED">Approved</option>
+        <option value="REJECTED">Rejected</option>
+      </select>
+      <input type="date" class="input" id="filterFrom" style="width:150px" placeholder="From date">
+      <input type="date" class="input" id="filterTo" style="width:150px" placeholder="To date">
+      <button class="btn btn-ghost btn-sm" onclick="load()">Filter</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearFilters()">Clear</button>
+      <span id="totalCount" style="margin-left:auto;font-size:12px;color:var(--text3)"></span>
+    </div>
+  </div>
+
   <div class="card"><div class="card-body" style="padding:0"><div id="root"><div class="loading">Loading…</div></div></div></div>
 </div></div></div>
+
 <script src="/js/app.js"></script>
 <script>
-(async()=>{
-  await buildSidebar('hod-history');
-  const all = await api('GET','/api/hod/corrections/all');
-  if (!all.length) { document.getElementById('root').innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">No requests yet.</div></div>'; return; }
-  document.getElementById('root').innerHTML=`
+let currentUser = null;
+
+async function load() {
+  document.getElementById('root').innerHTML = '<div class="loading">Loading…</div>';
+  const status = document.getElementById('filterStatus').value;
+  const from   = document.getElementById('filterFrom').value;
+  const to     = document.getElementById('filterTo').value;
+
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (from)   params.set('from', from);
+  if (to)     params.set('to', to);
+
+  const data = await api('GET', '/api/hod/corrections/all?' + params.toString());
+
+  // API returns { rows, total, page } — handle both array (old) and object (new)
+  const rows  = Array.isArray(data) ? data : (data.rows || []);
+  const total = Array.isArray(data) ? data.length : (data.total || 0);
+
+  document.getElementById('totalCount').textContent = `${total} record${total !== 1 ? 's' : ''}`;
+
+  // Update subtitle based on role
+  if (currentUser && currentUser.role === 'HR') {
+    document.getElementById('pageSub').textContent = 'All departments — every correction request';
+  } else {
+    document.getElementById('pageSub').textContent = 'Your team\'s correction decisions';
+  }
+
+  if (!rows.length) {
+    document.getElementById('root').innerHTML = '<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">No requests found.</div></div>';
+    return;
+  }
+
+  const isHR = currentUser && ['HR','ADMIN'].includes(currentUser.role);
+
+  document.getElementById('root').innerHTML = `
     <table>
-      <thead><tr><th>Employee</th><th>Date</th><th>Missing</th><th>Proposed</th><th>Submitted</th><th>Decided</th><th>Status</th></tr></thead>
+      <thead>
+        <tr>
+          <th>Employee</th>
+          ${isHR ? '<th>Department</th>' : ''}
+          <th>Date</th>
+          <th>Missing</th>
+          <th>Proposed</th>
+          <th>Justification</th>
+          <th>Submitted</th>
+          <th>Decided</th>
+          <th>Decided by</th>
+          <th>Status</th>
+        </tr>
+      </thead>
       <tbody>
-        ${all.map(r=>`<tr>
-          <td><div style="font-weight:600">${r.employee_name}</div><div style="font-size:11px;color:var(--text3)">${r.staff_id}</div></td>
+        ${rows.map(r => `<tr>
+          <td><div style="font-weight:600">${r.employee_name||'—'}</div><div style="font-size:11px;color:var(--text3)">${r.staff_id||''}</div></td>
+          ${isHR ? `<td style="font-size:12px;color:var(--text3)">${r.department||'—'}</td>` : ''}
           <td>${fmtDate(r.date)}</td>
-          <td>${r.fieldMissing.replace('_',' ')}</td>
-          <td style="font-family:monospace;font-weight:600">${r.proposedTime}</td>
-          <td style="font-size:12px;color:var(--text3)">${fmtDateTime(r.createdAt)}</td>
-          <td style="font-size:12px;color:var(--text3)">${r.decidedAt?fmtDateTime(r.decidedAt):'—'}</td>
+          <td>${(r.field_missing||'').replace('_',' ')}</td>
+          <td style="font-family:monospace;font-weight:600">${r.proposed_time||'—'}</td>
+          <td style="font-size:12px;color:var(--text2);max-width:180px">${(r.justification||'').slice(0,60)}${(r.justification||'').length>60?'…':''}</td>
+          <td style="font-size:12px;color:var(--text3)">${fmtDateTime(r.created_at)}</td>
+          <td style="font-size:12px;color:var(--text3)">${r.decided_at ? fmtDateTime(r.decided_at) : '—'}</td>
+          <td style="font-size:12px;color:var(--text3)">${r.hod_name||'—'}</td>
           <td>${statusBadge(r.status)}</td>
         </tr>`).join('')}
       </tbody>
     </table>`;
+}
+
+function clearFilters() {
+  document.getElementById('filterStatus').value = '';
+  document.getElementById('filterFrom').value = '';
+  document.getElementById('filterTo').value = '';
+  load();
+}
+
+(async () => {
+  currentUser = await buildSidebar('hod-history');
+  await load();
 })();
 </script>
 </body></html>

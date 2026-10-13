@@ -19,14 +19,13 @@
   <div id="root"><div class="loading">Loading…</div></div>
 </div></div></div>
 
-<!-- Reject modal -->
 <div class="overlay" id="rejectModal">
   <div class="modal">
     <div class="modal-head"><div class="modal-title">Reject correction request</div><div class="modal-sub" id="rejectModalSub"></div></div>
     <div class="modal-body">
       <div class="form-group">
         <label class="label">Reason for rejection <span class="req">*</span></label>
-        <textarea class="textarea" id="rejectReason" rows="4" placeholder="Explain why. The employee will see this remark and may resubmit with more evidence."></textarea>
+        <textarea class="textarea" id="rejectReason" rows="4" placeholder="Explain why. The employee will see this remark and may resubmit."></textarea>
         <div class="field-err" id="errReject">Please provide a reason.</div>
       </div>
     </div>
@@ -43,68 +42,83 @@ let pendingReqs = [];
 let rejectingId = null;
 
 async function loadPending() {
-  pendingReqs = await api('GET', '/api/hod/corrections/pending');
   const root = document.getElementById('root');
-  if (!pendingReqs.length) {
-    root.innerHTML = `
-      <div class="alert success">
-        <svg class="alert-ico" viewBox="0 0 24 24" fill="none" stroke="var(--green-d)" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
-        <div><div class="alert-ttl">All clear!</div><div class="alert-txt">No pending correction requests at this time.</div></div>
-      </div>
-      <div class="card"><div class="card-body"><div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Your inbox is empty.</div></div></div></div>`;
-    return;
-  }
+  try {
+    const data = await api('GET', '/api/hod/corrections/pending');
+    // Handle both array response and object with rows property
+    pendingReqs = Array.isArray(data) ? data : (data.rows || []);
 
-  root.innerHTML = pendingReqs.map(r => {
-    const initials = r.employee_name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-    return `
-    <div class="appr-card" id="card-${r.id}">
-      <div class="appr-head">
-        <span class="appr-title">⏳ Correction request — awaiting your decision</span>
-        <span class="badge pend pulse"><span class="badge-dot"></span>New</span>
-      </div>
-      <div class="appr-body">
-        <div class="appr-emp">
-          <div class="appr-av">${initials}</div>
-          <div>
-            <div style="font-size:14px;font-weight:700">${r.employee_name}</div>
-            <div style="font-size:12px;color:var(--text3)">${r.department} · ${r.staff_id}</div>
+    if (!pendingReqs.length) {
+      root.innerHTML = `
+        <div class="alert success">
+          <svg class="alert-ico" viewBox="0 0 24 24" fill="none" stroke="var(--green-d)" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+          <div><div class="alert-ttl">All clear!</div><div class="alert-txt">No pending correction requests at this time.</div></div>
+        </div>
+        <div class="card"><div class="card-body"><div class="empty"><div class="empty-icon">✅</div><div class="empty-text">Your inbox is empty.</div></div></div></div>`;
+      return;
+    }
+
+    root.innerHTML = pendingReqs.map(r => {
+      // Safely read fields — support both snake_case (DB) and camelCase (just in case)
+      const employeeName = r.employee_name || r.employeeName || 'Unknown';
+      const fieldMissing = r.field_missing  || r.fieldMissing  || '';
+      const proposedTime = r.proposed_time  || r.proposedTime  || '—';
+      const createdAt    = r.created_at     || r.createdAt     || '';
+      const initials     = employeeName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+
+      return `
+      <div class="appr-card" id="card-${r.id}">
+        <div class="appr-head">
+          <span class="appr-title">⏳ Correction request — awaiting your decision</span>
+          <span class="badge pend pulse"><span class="badge-dot"></span>New</span>
+        </div>
+        <div class="appr-body">
+          <div class="appr-emp">
+            <div class="appr-av">${initials}</div>
+            <div>
+              <div style="font-size:14px;font-weight:700">${employeeName}</div>
+              <div style="font-size:12px;color:var(--text3)">${r.department||''} · ${r.staff_id||''}</div>
+            </div>
+            <span style="margin-left:auto;font-size:11px;color:var(--text3)">${timeAgo(createdAt)}</span>
           </div>
-          <span style="margin-left:auto;font-size:11px;color:var(--text3)">${timeAgo(r.createdAt)}</span>
+          <div class="info-grid">
+            <div><div class="info-lbl">Date</div><div class="info-val">${fmtDate(r.date)}</div></div>
+            <div><div class="info-lbl">Missing field</div><div class="info-val">${fieldMissing.replace(/_/g,' ')}</div></div>
+            <div><div class="info-lbl">Proposed time</div><div class="info-val" style="font-family:monospace;font-size:16px;color:var(--blue-d)">${proposedTime}</div></div>
+            <div><div class="info-lbl">Evidence</div><div class="info-val">${r.evidence||'None provided'}</div></div>
+          </div>
+          <div style="background:var(--amber-l);border:1px solid #FEC84B;border-radius:var(--r-sm);padding:12px;margin-bottom:16px">
+            <div style="font-size:11px;font-weight:700;color:var(--amber-d);text-transform:uppercase;margin-bottom:5px">Justification</div>
+            <div style="font-size:13px;line-height:1.7;color:var(--text)">${r.justification||''}</div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-success" onclick="approve(${r.id})">
+              <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+              Approve & auto-fill
+            </button>
+            <button class="btn btn-danger" onclick="startReject(${r.id}, '${employeeName.replace(/'/g,"\\'")}', '${r.date}')">
+              <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              Reject
+            </button>
+          </div>
         </div>
-        <div class="info-grid">
-          <div><div class="info-lbl">Date</div><div class="info-val">${fmtDate(r.date)}</div></div>
-          <div><div class="info-lbl">Missing field</div><div class="info-val">${r.fieldMissing.replace('_',' ')}</div></div>
-          <div><div class="info-lbl">Proposed time</div><div class="info-val" style="font-family:monospace;font-size:16px;color:var(--blue-d)">${r.proposedTime}</div></div>
-          <div><div class="info-lbl">Evidence</div><div class="info-val">${r.evidence||'None provided'}</div></div>
-        </div>
-        <div style="background:var(--amber-l);border:1px solid #FEC84B;border-radius:var(--r-sm);padding:12px;margin-bottom:16px">
-          <div style="font-size:11px;font-weight:700;color:var(--amber-d);text-transform:uppercase;margin-bottom:5px">Justification</div>
-          <div style="font-size:13px;line-height:1.7;color:var(--text)">${r.justification}</div>
-        </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn btn-success" onclick="approve(${r.id})">
-            <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
-            Approve & auto-fill
-          </button>
-          <button class="btn btn-danger" onclick="startReject(${r.id}, '${r.employee_name}', '${r.date}')">
-            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            Reject
-          </button>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+      </div>`;
+    }).join('');
+
+  } catch(e) {
+    console.error('loadPending error:', e);
+    root.innerHTML = `<div class="alert danger"><div class="alert-ttl">Error loading requests</div><div class="alert-txt">${e.message}</div></div>`;
+  }
 }
 
 async function approve(id) {
   if (!confirm('Approve this correction? The attendance record will be auto-filled.')) return;
   try {
     await api('POST', `/api/hod/corrections/${id}/approve`);
-    document.getElementById('card-'+id).remove();
+    document.getElementById('card-' + id)?.remove();
     if (!document.querySelector('.appr-card')) loadPending();
     alert('✅ Approved! Attendance record has been auto-filled and employee notified.');
-  } catch(e) { alert('Error: '+e.message); }
+  } catch(e) { alert('Error: ' + e.message); }
 }
 
 function startReject(id, name, date) {
@@ -118,20 +132,30 @@ function startReject(id, name, date) {
 
 async function confirmReject() {
   const reason = document.getElementById('rejectReason').value.trim();
-  if (!reason) { document.getElementById('rejectReason').classList.add('err'); document.getElementById('errReject').classList.add('show'); return; }
+  if (!reason) {
+    document.getElementById('rejectReason').classList.add('err');
+    document.getElementById('errReject').classList.add('show');
+    return;
+  }
   const btn = document.getElementById('rejectConfirmBtn');
-  btn.disabled=true; btn.textContent='Rejecting…';
+  btn.disabled = true; btn.textContent = 'Rejecting…';
   try {
     await api('POST', `/api/hod/corrections/${rejectingId}/reject`, { hodRemarks: reason });
     closeModal('rejectModal');
-    document.getElementById('card-'+rejectingId).remove();
+    document.getElementById('card-' + rejectingId)?.remove();
     if (!document.querySelector('.appr-card')) loadPending();
     alert('Request rejected. Employee has been notified.');
-  } catch(e) { alert('Error: '+e.message); }
-  finally { btn.disabled=false; btn.textContent='Confirm rejection'; }
+  } catch(e) { alert('Error: ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = 'Confirm rejection'; }
 }
 
-document.getElementById('rejectModal').addEventListener('click', e => { if(e.target===e.currentTarget) closeModal('rejectModal'); });
-(async()=>{ await buildSidebar('hod-approvals'); await loadPending(); })();
+document.getElementById('rejectModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal('rejectModal');
+});
+
+(async () => {
+  await buildSidebar('hod-approvals');
+  await loadPending();
+})();
 </script>
 </body></html>

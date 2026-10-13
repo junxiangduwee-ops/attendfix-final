@@ -20,16 +20,16 @@
   }
   document.getElementById('root').innerHTML = `
     <table>
-      <thead><tr><th>Date</th><th>Missing</th><th>Proposed time</th><th>Justification</th><th>Submitted</th><th>HOD decision</th><th>Status</th></tr></thead>
+      <thead><tr><th>Date</th><th>Missing</th><th>Proposed time</th><th>Justification</th><th>Submitted</th><th>HOD remarks</th><th>Status</th></tr></thead>
       <tbody>
         ${reqs.map(r=>`
           <tr>
             <td style="font-weight:600">${fmtDate(r.date)}</td>
-            <td>${r.fieldMissing.replace('_',' ')}</td>
-            <td style="font-family:monospace;font-weight:600">${r.proposedTime}</td>
-            <td style="max-width:200px;font-size:12px;color:var(--text2)">${r.justification.slice(0,60)}${r.justification.length>60?'…':''}</td>
-            <td style="font-size:12px;color:var(--text3)">${fmtDateTime(r.createdAt)}</td>
-            <td style="font-size:12px;color:var(--text2)">${r.hodRemarks?`<em>${r.hodRemarks.slice(0,50)}…</em>`:'—'}</td>
+            <td>${(r.field_missing||'').replace('_',' ')}</td>
+            <td style="font-family:monospace;font-weight:600">${r.proposed_time||'—'}</td>
+            <td style="max-width:200px;font-size:12px;color:var(--text2)">${(r.justification||'').slice(0,60)}${(r.justification||'').length>60?'…':''}</td>
+            <td style="font-size:12px;color:var(--text3)">${fmtDateTime(r.created_at)}</td>
+            <td style="font-size:12px;color:var(--text2)">${r.hod_remarks?`<em>${r.hod_remarks.slice(0,50)}…</em>`:'—'}</td>
             <td>${statusBadge(r.status)}</td>
           </tr>`).join('')}
       </tbody>

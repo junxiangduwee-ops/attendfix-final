@@ -11,33 +11,30 @@ const crWithUser = () =>
     .join('users as u', 'u.id', 'cr.user_id')
     .join('attendance as a', 'a.id', 'cr.attendance_id')
     .select(
-      // correction_requests — all columns explicitly named to avoid join conflicts
-      'cr.id',
-      'cr.user_id',
-      'cr.attendance_id',
-      'cr.date',
-      'cr.field_missing',
-      'cr.proposed_time',
-      'cr.justification',
-      'cr.evidence',
-      'cr.status',
-      'cr.hod_id',
-      'cr.hod_remarks',
-      'cr.decided_at',
-      'cr.hr_synced',
-      'cr.hr_sync_status',
-      'cr.hr_sync_error',
-      'cr.hr_synced_at',
-      'cr.created_at',
-      'cr.updated_at',
-      // from users
-      'u.name as employee_name',
-      'u.staff_id',
-      'u.department',
-      'u.email',
-      'u.hod_id as employee_hod_id',
-      // from attendance
-      'a.hr_record_id',
+      db.raw('cr.id                as id'),
+      db.raw('cr.user_id           as user_id'),
+      db.raw('cr.attendance_id     as attendance_id'),
+      db.raw('cr.date              as date'),
+      db.raw('cr.field_missing     as field_missing'),
+      db.raw('cr.proposed_time     as proposed_time'),
+      db.raw('cr.justification     as justification'),
+      db.raw('cr.evidence          as evidence'),
+      db.raw('cr.status            as status'),
+      db.raw('cr.hod_id            as hod_id'),
+      db.raw('cr.hod_remarks       as hod_remarks'),
+      db.raw('cr.decided_at        as decided_at'),
+      db.raw('cr.hr_synced         as hr_synced'),
+      db.raw('cr.hr_sync_status    as hr_sync_status'),
+      db.raw('cr.hr_sync_error     as hr_sync_error'),
+      db.raw('cr.hr_synced_at      as hr_synced_at'),
+      db.raw('cr.created_at        as created_at'),
+      db.raw('cr.updated_at        as updated_at'),
+      db.raw('u.name               as employee_name'),
+      db.raw('u.staff_id           as staff_id'),
+      db.raw('u.department         as department'),
+      db.raw('u.email              as email'),
+      db.raw('u.hod_id             as employee_hod_id'),
+      db.raw('a.hr_record_id       as hr_record_id'),
     );
 
 // Pending approvals for this HOD's team
@@ -45,8 +42,11 @@ router.get('/api/hod/corrections/pending', requireAuth, requireRole(...HOD_ROLES
   try {
     let q = crWithUser().where('cr.status', 'PENDING');
     if (req.session.role === 'HOD') q = q.where('u.hod_id', req.session.userId);
-    res.json(await q.orderBy('cr.created_at', 'asc'));
-  } catch (e) { res.status(500).json({ error: 'Server error.' }); }
+    const rows = await q.orderBy('cr.created_at', 'asc');
+    // Debug: log first row keys so we can see what the DB actually returns
+    if (rows.length > 0) console.log('[DEBUG] pending row keys:', Object.keys(rows[0]));
+    res.json(rows);
+  } catch (e) { console.error('[HOD pending error]', e); res.status(500).json({ error: 'Server error.' }); }
 });
 
 // All requests with filters (history)

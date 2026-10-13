@@ -48,7 +48,7 @@ async function loadTeam() {
             ${dates.map(d=>{
               const day = emp.days[d];
               if (!day) return '<td><span style="color:var(--text3)">—</span></td>';
-              return `<td>${attendanceBadge(day)}<div style="font-size:10px;color:var(--text3);margin-top:3px">${day.clockIn||'?'}–${day.clockOut||'?'}</div></td>`;
+              return `<td>${attendanceBadge(day)}<div style="font-size:10px;color:var(--text3);margin-top:3px">${day.clock_in?day.clock_in.slice(0,5):'?'}–${day.clock_out?day.clock_out.slice(0,5):'?'}</div></td>`;
             }).join('')}
           </tr>`).join('')}
       </tbody>
