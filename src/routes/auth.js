@@ -19,7 +19,8 @@ router.post('/api/auth/login', async (req, res) => {
     req.session.role   = user.role;
     req.session.name   = user.name;
     await db('audit_logs').insert({ actor_id: user.id, action: 'LOGIN', ip: req.ip });
-    res.json({ ok: true, role: user.role, name: user.name });
+    const redirect = user.role === 'HR' ? '/hod/history' : '/dashboard';
+    res.json({ ok: true, role: user.role, name: user.name, redirect });
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error.' }); }
 });
 

@@ -63,7 +63,7 @@ async function doLogin() {
     });
     const d = await r.json();
     if (!r.ok) { err.textContent = d.error; err.style.display='block'; btn.disabled=false; btn.textContent='Sign in →'; return; }
-    window.location.href = '/dashboard';
+    window.location.href = data.redirect || '/dashboard';
   } catch(e) { err.textContent='Network error. Please try again.'; err.style.display='block'; btn.disabled=false; btn.textContent='Sign in →'; }
 }
 </script>

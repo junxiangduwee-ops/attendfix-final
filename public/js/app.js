@@ -55,7 +55,8 @@ async function buildSidebar(activePage) {
 
   // Role is stored uppercase in DB (EMPLOYEE, HOD, HR, ADMIN)
   const role  = (user.role || '').toUpperCase();
-  const isHOD = ['HOD', 'HR', 'ADMIN'].includes(role);
+  const isHOD = ['HOD', 'ADMIN'].includes(role);
+  const isHR  = role === 'HR';
 
   // Auto-mark notifications as read when visiting My Attendance page
   if (activePage === 'my-attendance' && user.unreadCount > 0) {
@@ -75,6 +76,7 @@ async function buildSidebar(activePage) {
       <div class="${avatarClass}">${initials}</div>
       <div><div class="sb-uname">${user.name}</div><div class="sb-urole">${user.role}</div></div>
     </div>
+    ${!isHR ? `
     <div class="sb-section">
       <div class="sb-section-label">Attendance</div>
       <a href="/dashboard" class="sb-item ${activePage==='dashboard'?'active':''}">
@@ -90,10 +92,10 @@ async function buildSidebar(activePage) {
         <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
         My Requests
       </a>
-    </div>
+    </div>` : ''}
     ${isHOD ? `
     <div class="sb-section">
-      <div class="sb-section-label">${role === 'HR' ? 'HR Panel' : 'HOD Panel'}</div>
+      <div class="sb-section-label">HOD Panel</div>
       <a href="/hod/approvals" class="sb-item ${activePage==='hod-approvals'?'active':''}">
         <svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         Pending Approvals
@@ -108,6 +110,18 @@ async function buildSidebar(activePage) {
         Approval History
       </a>
     </div>` : ''}
+    ${isHR ? `
+    <div class="sb-section">
+      <div class="sb-section-label">HR Panel</div>
+      <a href="/hod/history" class="sb-item ${activePage==='hod-history'?'active':''}">
+        <svg viewBox="0 0 24 24"><path d="M12 2v10l4 4"/><circle cx="12" cy="12" r="10"/></svg>
+        All Corrections
+      </a>
+      <a href="/hr-sync" class="sb-item ${activePage==='hr-sync'?'active':''}">
+        <svg viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        HR Sync
+      </a>
+    </div>` : ''}
     <div class="sb-bottom">
       <a href="/logout" class="sb-logout">
         <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
@@ -116,7 +130,7 @@ async function buildSidebar(activePage) {
     </div>
   `;
 
-  // Load HOD pending count
+  // Load HOD pending count (HOD only, not HR)
   if (isHOD) {
     try {
       const pending = await api('GET', '/api/hod/corrections/pending');

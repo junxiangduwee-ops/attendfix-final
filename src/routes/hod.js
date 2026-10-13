@@ -4,7 +4,8 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { notifyDecision } = require('../services/email');
 const { pushCorrectionToHR } = require('../services/sync');
 
-const HOD_ROLES = ['HOD', 'HR', 'ADMIN'];
+const HOD_ROLES    = ['HOD', 'HR', 'ADMIN']; // read access (history, stats, team)
+const APPROVER_ROLES = ['HOD', 'ADMIN'];       // approve/reject only — HR is monitor-only
 
 const crWithUser = () =>
   db('correction_requests as cr')
@@ -65,7 +66,7 @@ router.get('/api/hod/corrections/all', requireAuth, requireRole(...HOD_ROLES), a
 });
 
 // Approve
-router.post('/api/hod/corrections/:id/approve', requireAuth, requireRole(...HOD_ROLES), async (req, res) => {
+router.post('/api/hod/corrections/:id/approve', requireAuth, requireRole(...APPROVER_ROLES), async (req, res) => {
   try {
     const cr = await crWithUser().where('cr.id', parseInt(req.params.id)).first();
     if (!cr)                     return res.status(404).json({ error: 'Request not found.' });
@@ -116,7 +117,7 @@ router.post('/api/hod/corrections/:id/approve', requireAuth, requireRole(...HOD_
 });
 
 // Reject
-router.post('/api/hod/corrections/:id/reject', requireAuth, requireRole(...HOD_ROLES), async (req, res) => {
+router.post('/api/hod/corrections/:id/reject', requireAuth, requireRole(...APPROVER_ROLES), async (req, res) => {
   try {
     const { hodRemarks } = req.body;
     if (!hodRemarks) return res.status(400).json({ error: 'Remarks required when rejecting.' });
