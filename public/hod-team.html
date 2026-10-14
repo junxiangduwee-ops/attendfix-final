@@ -1,60 +1,122 @@
 <!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Team Attendance — AttendFix</title><link rel="stylesheet" href="/css/app.css"></head>
+<title>Team Attendance — AttendFix</title><link rel="stylesheet" href="/css/app.css">
+<style>
+.team-table { width:100%; border-collapse:collapse; }
+.team-table th { background:var(--surface2); color:var(--text3); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; padding:10px 12px; text-align:left; white-space:nowrap; border-bottom:1px solid var(--border); }
+.team-table td { padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.team-table tr:last-child td { border-bottom:none; }
+.team-table tr:hover td { background:var(--surface2); }
+.emp-name { font-weight:600; font-size:13px; }
+.emp-id { font-size:11px; color:var(--text3); }
+.day-cell { text-align:center; min-width:90px; }
+.day-times { font-size:10px; color:var(--text3); margin-top:3px; font-variant-numeric:tabular-nums; }
+.day-absent { color:var(--text3); text-align:center; }
+</style>
+</head>
 <body>
 <div class="app"><nav class="sidebar" id="sidebar"></nav>
 <div class="main-content"><div class="page-body">
   <div class="page-title">Team attendance</div>
-  <div class="page-sub">Monitor your team's records</div>
-  <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center">
-    <input type="date" class="input" id="fromDate" style="width:auto" value="2026-10-06">
+  <div class="page-sub">One row per employee — columns are dates</div>
+
+  <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
+    <input type="date" class="input" id="fromDate" style="width:auto">
     <span style="color:var(--text3)">to</span>
-    <input type="date" class="input" id="toDate" style="width:auto" value="2026-10-12">
+    <input type="date" class="input" id="toDate" style="width:auto">
     <button class="btn btn-ghost btn-sm" onclick="loadTeam()">Filter</button>
+    <span id="teamSub" style="font-size:12px;color:var(--text3);margin-left:auto"></span>
   </div>
-  <div class="card"><div class="card-body" style="padding:0"><div id="root"><div class="loading">Loading…</div></div></div></div>
+
+  <div class="card" style="overflow-x:auto">
+    <div id="root"><div class="loading">Loading…</div></div>
+  </div>
 </div></div></div>
+
 <script src="/js/app.js"></script>
 <script>
 async function loadTeam() {
+  document.getElementById('root').innerHTML = '<div class="loading">Loading…</div>';
   const from = document.getElementById('fromDate').value;
-  const to = document.getElementById('toDate').value;
-  const rows = await api('GET',`/api/hod/team/attendance?from=${from}&to=${to}`);
-  if (!rows.length) { document.getElementById('root').innerHTML='<div class="empty"><div class="empty-icon">👥</div><div class="empty-text">No records in this range.</div></div>'; return; }
+  const to   = document.getElementById('toDate').value;
 
-  // Group by employee
-  const byEmp = {};
-  rows.forEach(r => {
-    if (!byEmp[r.id]) byEmp[r.id] = { name:r.name, staff_id:r.staff_id, days:{} };
-    if (r.date) byEmp[r.id].days[r.date] = r;
-  });
+  const records = await api('GET', `/api/hod/team/attendance?from=${from}&to=${to}`);
 
-  // Get all unique dates
-  const dates = [...new Set(rows.filter(r=>r.date).map(r=>r.date))].sort();
+  if (!records.length) {
+    document.getElementById('root').innerHTML = '<div class="empty" style="padding:40px"><div class="empty-icon">👥</div><div class="empty-text">No records in this date range.</div></div>';
+    return;
+  }
+
+  // ── Step 1: collect all unique dates and employees ──────────────────────
+  const dateSet = {};   // date string → true
+  const empMap  = {};   // user_id → { name, staff_id, days: { date → record } }
+
+  for (const r of records) {
+    const uid = r.user_id; // guaranteed unique per employee from backend
+    if (!empMap[uid]) {
+      empMap[uid] = { name: r.name, staff_id: r.staff_id, days: {} };
+    }
+    if (r.date) {
+      empMap[uid].days[r.date] = r;
+      dateSet[r.date] = true;
+    }
+  }
+
+  const dates    = Object.keys(dateSet).sort();
+  const employees = Object.values(empMap).sort((a, b) => a.name.localeCompare(b.name));
+
+  document.getElementById('teamSub').textContent =
+    `${employees.length} employee${employees.length !== 1 ? 's' : ''} · ${dates.length} day${dates.length !== 1 ? 's' : ''}`;
+
+  // ── Step 2: build the table ─────────────────────────────────────────────
+  const headerCols = dates.map(d => {
+    const dt = new Date(d + 'T00:00');
+    const day = dt.toLocaleDateString('en-MY', { weekday: 'short' }).toUpperCase();
+    const date = dt.toLocaleDateString('en-MY', { day: 'numeric', month: 'short' }).toUpperCase();
+    return `<th class="day-cell">${day}<br>${date}</th>`;
+  }).join('');
+
+  const bodyRows = employees.map(emp => {
+    const dayCells = dates.map(d => {
+      const rec = emp.days[d];
+      if (!rec) return `<td class="day-absent">—</td>`;
+      const badge = attendanceBadge(rec);
+      const ci  = rec.clock_in  ? rec.clock_in.slice(0, 5)  : '?';
+      const co  = rec.clock_out ? rec.clock_out.slice(0, 5) : '?';
+      return `<td class="day-cell">${badge}<div class="day-times">${ci}–${co}</div></td>`;
+    }).join('');
+
+    return `<tr>
+      <td style="white-space:nowrap;min-width:140px">
+        <div class="emp-name">${emp.name}</div>
+        <div class="emp-id">${emp.staff_id}</div>
+      </td>
+      ${dayCells}
+    </tr>`;
+  }).join('');
 
   document.getElementById('root').innerHTML = `
-    <table>
+    <table class="team-table">
       <thead>
         <tr>
           <th>Employee</th>
-          ${dates.map(d=>`<th>${new Date(d+'T00:00').toLocaleDateString('en-MY',{weekday:'short',day:'numeric',month:'short'})}</th>`).join('')}
+          ${headerCols}
         </tr>
       </thead>
-      <tbody>
-        ${Object.values(byEmp).map(emp=>`
-          <tr>
-            <td><div style="font-weight:600">${emp.name}</div><div style="font-size:11px;color:var(--text3)">${emp.staff_id}</div></td>
-            ${dates.map(d=>{
-              const day = emp.days[d];
-              if (!day) return '<td><span style="color:var(--text3)">—</span></td>';
-              return `<td>${attendanceBadge(day)}<div style="font-size:10px;color:var(--text3);margin-top:3px">${day.clock_in?day.clock_in.slice(0,5):'?'}–${day.clock_out?day.clock_out.slice(0,5):'?'}</div></td>`;
-            }).join('')}
-          </tr>`).join('')}
-      </tbody>
+      <tbody>${bodyRows}</tbody>
     </table>`;
 }
 
-(async()=>{ await buildSidebar('hod-team'); await loadTeam(); })();
+(async () => {
+  // Default: last 7 days
+  const today = new Date();
+  const from  = new Date(today);
+  from.setDate(today.getDate() - 6);
+  document.getElementById('toDate').value   = today.toISOString().slice(0, 10);
+  document.getElementById('fromDate').value = from.toISOString().slice(0, 10);
+  await buildSidebar('hod-team');
+  await loadTeam();
+})();
 </script>
 </body></html>
