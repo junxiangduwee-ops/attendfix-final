@@ -44,17 +44,18 @@
     </div>
 
     <div class="card" style="margin-bottom:0">
-      <div class="card-header"><span class="card-title">📤 CSV upload</span></div>
+      <div class="card-header"><span class="card-title">📤 File import</span></div>
       <div class="card-body">
-        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Fallback: manually upload a CSV exported from your HR or biometric system.</p>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Manually upload attendance data exported from your HR or biometric system. Supports <strong>Excel (.xlsx)</strong> and CSV.</p>
         <div class="import-zone" onclick="document.getElementById('csvFile').click()" style="border:2px dashed var(--border2);border-radius:var(--r);padding:24px;text-align:center;cursor:pointer">
           <div style="font-size:28px;margin-bottom:6px">📁</div>
-          <div style="font-size:13px;font-weight:600;color:var(--text2)">Drop CSV here or click to browse</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:3px">Columns: staff_id, date, clock_in, clock_out</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text2)">Drop file here or click to browse</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">.xlsx or .csv · max 10 MB</div>
         </div>
-        <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="uploadCSV(this)">
+        <input type="file" id="csvFile" accept=".csv,.xlsx,.xls" style="display:none" onchange="uploadFile(this)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
-          <a href="/api/hr/import/template" class="btn btn-ghost btn-sm">⬇ Download template</a>
+          <a href="/api/hr/import/template/excel" class="btn btn-ghost btn-sm">⬇ Excel (.xlsx)</a>
+          <a href="/api/hr/import/template" class="btn btn-ghost btn-sm">⬇ CSV</a>
           <span id="csvStatus" style="font-size:12px;color:var(--text3)"></span>
         </div>
       </div>
@@ -119,18 +120,29 @@ async function triggerRetry() {
   btn.disabled=false; btn.textContent='Retry failed push-backs';
 }
 
-async function uploadCSV(input) {
-  const file = input.files[0]; if(!file) return;
-  document.getElementById('csvStatus').textContent = 'Uploading…';
-  const form = new FormData(); form.append('file', file);
+async function uploadFile(input) {
+  const file = input.files[0]; if (!file) return;
+  const status = document.getElementById('csvStatus');
+  const ext = file.name.split('.').pop().toLowerCase();
+  status.textContent = `Uploading ${ext.toUpperCase()}…`;
+  status.style.color = 'var(--text3)';
+  const form = new FormData();
+  form.append('file', file);
   try {
-    const r = await fetch('/api/hr/import/csv',{method:'POST',body:form});
+    const r = await fetch('/api/hr/import/csv', { method: 'POST', body: form });
     const d = await r.json();
-    if(!r.ok) throw new Error(d.error);
-    document.getElementById('csvStatus').textContent = `✓ ${d.imported} imported, ${d.skipped} errors`;
+    if (!r.ok) throw new Error(d.error);
+    status.style.color = d.skipped > 0 ? 'var(--amber-d)' : 'var(--green-d)';
+    status.textContent = `✓ ${d.imported} imported${d.skipped > 0 ? `, ${d.skipped} skipped` : ''}`;
+    if (d.errors && d.errors.length) {
+      console.table(d.errors.map(e => ({ row: JSON.stringify(e.row), error: e.error })));
+    }
     await loadSyncLog();
-  } catch(e) { document.getElementById('csvStatus').textContent = '✗ '+e.message; }
-  input.value='';
+  } catch (e) {
+    status.style.color = 'var(--red)';
+    status.textContent = '✗ ' + e.message;
+  }
+  input.value = '';
 }
 
 async function loadSyncLog() {
