@@ -148,27 +148,49 @@ router.post('/api/hr/import/csv', requireAuth, requireRole(...HR_ROLES), upload.
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-// CSV template download
-router.get('/api/hr/import/template', requireAuth, requireRole(...HR_ROLES), (req, res) => {
+// CSV template download (no auth needed — it's just a blank template)
+router.get('/api/hr/import/template', (req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="attendance_template.csv"');
   res.send('staff_id,date,clock_in,clock_out\nE-04291,2026-10-13,09:00,18:00\nE-04287,2026-10-13,08:55,17:45\n');
 });
 
-// Excel template download
-router.get('/api/hr/import/template/excel', requireAuth, requireRole(...HR_ROLES), (req, res) => {
+// Excel template download (no auth needed — it's just a blank template)
+router.get('/api/hr/import/template/excel', (req, res) => {
   const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Data template
   const data = [
-    ['staff_id', 'date',       'clock_in', 'clock_out'],
-    ['E-04291',  '2026-10-13', '09:00',    '18:00'   ],
-    ['E-04287',  '2026-10-13', '08:55',    '17:45'   ],
+    ['staff_id',  'date',        'clock_in', 'clock_out'],
+    ['E-04291',   '2026-10-13',  '09:00',    '18:00'   ],
+    ['E-04287',   '2026-10-13',  '08:55',    '17:45'   ],
+    ['E-04291',   '2026-10-14',  '08:30',    ''        ],  // missing clock_out example
+    ['E-04287',   '2026-10-14',  '',         '17:30'   ],  // missing clock_in example
   ];
   const ws = XLSX.utils.aoa_to_sheet(data);
-
-  // Column widths
   ws['!cols'] = [{ wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 12 }];
-
   XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
+
+  // Sheet 2: Instructions
+  const instructions = [
+    ['AttendFix — Attendance Import Template'],
+    [''],
+    ['COLUMN', 'FORMAT', 'REQUIRED', 'EXAMPLE'],
+    ['staff_id',  'Text — must match staff ID in system',    'Yes', 'E-04291'    ],
+    ['date',      'YYYY-MM-DD',                              'Yes', '2026-10-13' ],
+    ['clock_in',  'HH:MM or HH:MM:SS — leave blank if missing', 'No', '09:00'  ],
+    ['clock_out', 'HH:MM or HH:MM:SS — leave blank if missing', 'No', '18:00'  ],
+    [''],
+    ['NOTES'],
+    ['- One row per employee per day'],
+    ['- Leave clock_in or clock_out blank to mark as missing (will trigger correction flow)'],
+    ['- If a record already exists for that employee+date, it will be overwritten'],
+    ['- Maximum file size: 10 MB'],
+  ];
+  const wsInstr = XLSX.utils.aoa_to_sheet(instructions);
+  wsInstr['!cols'] = [{ wch: 20 }, { wch: 45 }, { wch: 12 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, wsInstr, 'Instructions');
+
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', 'attachment; filename="attendance_template.xlsx"');

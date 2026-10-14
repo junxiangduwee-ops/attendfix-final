@@ -22,7 +22,7 @@ async function migrate() {
 async function seed() {
   console.log('⏳ Seeding demo data…');
   const bcrypt = require('bcryptjs');
-  const hash = pw => bcrypt.hashSync(pw, 10);
+  const hash   = pw => bcrypt.hashSync(pw, 10);
 
   const [{ count }] = await db('users').count('id as count');
   if (parseInt(count) > 0) {
@@ -31,70 +31,68 @@ async function seed() {
     return;
   }
 
-  const [hod] = await db('users').insert({
-    name: 'Faizul Hisham', email: 'hod@mrdiy.com',
-    password: hash('hod123'), staff_id: 'M-00100',
-    department: 'Retail Operations', role: 'HOD',
-  }).returning('*');
+  // HR Admin
+  await db('users').insert({ name:'HR Admin', email:'hr@mrdiy.com', password:hash('hr123'), staff_id:'HR-001', department:'Human Resources', role:'HR' });
 
-  const [e1] = await db('users').insert({
-    name: 'Ahmad Razif', email: 'employee@mrdiy.com',
-    password: hash('emp123'), staff_id: 'E-04291',
-    department: 'Retail Operations', role: 'EMPLOYEE', hod_id: hod.id,
-  }).returning('*');
-
-  const [e2] = await db('users').insert({
-    name: 'Nurul Ain', email: 'employee2@mrdiy.com',
-    password: hash('emp123'), staff_id: 'E-04287',
-    department: 'Retail Operations', role: 'EMPLOYEE', hod_id: hod.id,
-  }).returning('*');
-
-  const [e3] = await db('users').insert({
-    name: 'Siti Rahimah', email: 'employee3@mrdiy.com',
-    password: hash('emp123'), staff_id: 'E-04318',
-    department: 'Retail Operations', role: 'EMPLOYEE', hod_id: hod.id,
-  }).returning('*');
-
-  await db('users').insert({
-    name: 'HR Admin', email: 'hr@mrdiy.com',
-    password: hash('hr123'), staff_id: 'HR-001',
-    department: 'Human Resources', role: 'HR',
-  });
-
-  // Attendance for Ahmad — Thu missing clock-out (simulates HR import)
-  const week = [
-    { date: '2026-10-06', clock_in: '08:54:00', clock_out: '18:02:00' },
-    { date: '2026-10-07', clock_in: '09:12:00', clock_out: '17:55:00' },
-    { date: '2026-10-08', clock_in: '08:47:00', clock_out: '18:30:00' },
-    { date: '2026-10-09', clock_in: '08:50:00', clock_out: null       },
-    { date: '2026-10-10', clock_in: '09:01:00', clock_out: '17:45:00' },
+  // HODs — one per department
+  const depts = [
+    { dept:'Operations',      name:'Rashid Hamdan',     email:'rashid.hamdan@mrdiy.com',     staff_id:'H-00101' },
+    { dept:'Retail',          name:'Fauziah Ismail',    email:'fauziah.ismail@mrdiy.com',    staff_id:'H-00102' },
+    { dept:'Logistics',       name:'Zulkifli Nordin',   email:'zulkifli.nordin@mrdiy.com',   staff_id:'H-00103' },
+    { dept:'Finance',         name:'Lim Bee Ching',     email:'lim.beeching@mrdiy.com',      staff_id:'H-00104' },
+    { dept:'Human Resources', name:'Priya Subramaniam', email:'priya.subramaniam@mrdiy.com', staff_id:'H-00105' },
   ];
-  for (const row of week) {
-    await db('attendance').insert({
-      user_id: e1.id, source: 'HR_SYSTEM', synced_at: new Date(),
-      hr_record_id: `BIO-${e1.staff_id}-${row.date}`, ...row,
-    }).onConflict(['user_id', 'date']).ignore();
+  const hodMap = {};
+  for (const d of depts) {
+    const [hod] = await db('users').insert({ name:d.name, email:d.email, password:hash('hod123'), staff_id:d.staff_id, department:d.dept, role:'HOD' }).returning('*');
+    hodMap[d.dept] = hod.id;
   }
 
-  // Full week for Nurul and Siti
-  for (const row of week) {
-    await db('attendance').insert({ user_id: e2.id, source: 'HR_SYSTEM', synced_at: new Date(), date: row.date, clock_in: '09:00:00', clock_out: '18:00:00' }).onConflict(['user_id','date']).ignore();
-    await db('attendance').insert({ user_id: e3.id, source: 'HR_SYSTEM', synced_at: new Date(), date: row.date, clock_in: '08:55:00', clock_out: '17:50:00' }).onConflict(['user_id','date']).ignore();
+  // 30 Employees — 6 per department
+  const employees = [
+    { name:'Ahmad Razif Bin Bakar',  email:'ahmad.razif@mrdiy.com',    staff_id:'E-04291', dept:'Operations'      },
+    { name:'Mohd Hafiz Bin Yusof',   email:'mohd.hafiz@mrdiy.com',     staff_id:'E-04292', dept:'Operations'      },
+    { name:'Nurul Huda Bt Ramlan',   email:'nurul.huda@mrdiy.com',     staff_id:'E-04293', dept:'Operations'      },
+    { name:'Azri Bin Othman',        email:'azri.othman@mrdiy.com',    staff_id:'E-04294', dept:'Operations'      },
+    { name:'Saleha Bt Zainal',       email:'saleha.zainal@mrdiy.com',  staff_id:'E-04295', dept:'Operations'      },
+    { name:'Firdaus Bin Kassim',     email:'firdaus.kassim@mrdiy.com', staff_id:'E-04296', dept:'Operations'      },
+    { name:'Nurul Ain Bt Hamid',     email:'nurul.ain@mrdiy.com',      staff_id:'E-04287', dept:'Retail'          },
+    { name:'Kavitha Rajasekaran',    email:'kavitha.raja@mrdiy.com',   staff_id:'E-04288', dept:'Retail'          },
+    { name:'Tan Wei Liang',          email:'tan.weiliang@mrdiy.com',   staff_id:'E-04289', dept:'Retail'          },
+    { name:'Norashikin Bt Musa',     email:'norashikin.musa@mrdiy.com',staff_id:'E-04290', dept:'Retail'          },
+    { name:'Rajendran Pillai',       email:'rajendran.p@mrdiy.com',    staff_id:'E-04281', dept:'Retail'          },
+    { name:'Wong Mei Ling',          email:'wong.meiling@mrdiy.com',   staff_id:'E-04282', dept:'Retail'          },
+    { name:'Siti Rahimah Bt Alias',  email:'siti.rahimah@mrdiy.com',   staff_id:'E-04318', dept:'Logistics'       },
+    { name:'Hairul Azwan Bin Daud',  email:'hairul.azwan@mrdiy.com',   staff_id:'E-04319', dept:'Logistics'       },
+    { name:'Rosnah Bt Ibrahim',      email:'rosnah.ibrahim@mrdiy.com', staff_id:'E-04320', dept:'Logistics'       },
+    { name:'Syafiq Bin Zamri',       email:'syafiq.zamri@mrdiy.com',   staff_id:'E-04321', dept:'Logistics'       },
+    { name:'Chong Kok Wai',          email:'chong.kokwai@mrdiy.com',   staff_id:'E-04322', dept:'Logistics'       },
+    { name:'Munirah Bt Saari',       email:'munirah.saari@mrdiy.com',  staff_id:'E-04323', dept:'Logistics'       },
+    { name:'Noraini Bt Mansor',      email:'noraini.mansor@mrdiy.com', staff_id:'E-04340', dept:'Finance'         },
+    { name:'Arif Bin Zainudin',      email:'arif.zainudin@mrdiy.com',  staff_id:'E-04341', dept:'Finance'         },
+    { name:'Stella Ong Hui Yin',     email:'stella.ong@mrdiy.com',     staff_id:'E-04342', dept:'Finance'         },
+    { name:'Mohd Amirul Bin Salleh', email:'mohd.amirul@mrdiy.com',    staff_id:'E-04343', dept:'Finance'         },
+    { name:'Dayang Norfazlina',      email:'dayang.norfaz@mrdiy.com',  staff_id:'E-04344', dept:'Finance'         },
+    { name:'Suresh Kumar A/L Raman', email:'suresh.kumar@mrdiy.com',   staff_id:'E-04345', dept:'Finance'         },
+    { name:'Zarina Bt Ghazali',      email:'zarina.ghazali@mrdiy.com', staff_id:'E-04360', dept:'Human Resources' },
+    { name:'Hafizuddin Bin Razali',  email:'hafizuddin.r@mrdiy.com',   staff_id:'E-04361', dept:'Human Resources' },
+    { name:'Umi Kalthum Bt Bahari',  email:'umi.kalthum@mrdiy.com',    staff_id:'E-04362', dept:'Human Resources' },
+    { name:'Ng Boon Keong',          email:'ng.boonkeong@mrdiy.com',   staff_id:'E-04363', dept:'Human Resources' },
+    { name:'Asmah Bt Razak',         email:'asmah.razak@mrdiy.com',    staff_id:'E-04364', dept:'Human Resources' },
+    { name:'Venkatesh A/L Pillai',   email:'venkatesh.p@mrdiy.com',    staff_id:'E-04365', dept:'Human Resources' },
+  ];
+
+  for (const e of employees) {
+    await db('users').insert({ name:e.name, email:e.email, password:hash('emp123'), staff_id:e.staff_id, department:e.dept, role:'EMPLOYEE', hod_id:hodMap[e.dept] });
   }
 
-  // Missing-record notification for Ahmad
-  await db('notifications').insert({
-    user_id: e1.id, type: 'missing_record', is_read: false,
-    title: 'Missing clock-out detected',
-    message: 'Your clock-out was not recorded for Thursday, 9 October 2026. Please submit a correction within 48 hours.',
-  });
-
-  console.log('✅ Demo data seeded.');
+  console.log('✅ Demo data seeded — 5 HODs, 30 employees, 1 HR Admin.');
   console.log('');
-  console.log('   Demo accounts:');
-  console.log('   employee@mrdiy.com  /  emp123  (Employee)');
-  console.log('   hod@mrdiy.com       /  hod123  (HOD)');
-  console.log('   hr@mrdiy.com        /  hr123   (HR Admin)');
+  console.log('   Login with any employee email / emp123');
+  console.log('   Login with any HOD email      / hod123');
+  console.log('   hr@mrdiy.com                  / hr123');
+  console.log('');
+  console.log('   Then upload dummy_attendance.xlsx via HR Sync to load attendance data.');
 }
 
 async function reset() {
