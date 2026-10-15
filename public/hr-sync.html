@@ -20,10 +20,20 @@
     <div class="card" style="margin-bottom:0">
       <div class="card-header"><span class="card-title">⬇ Pull from HR</span></div>
       <div class="card-body">
-        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Fetch attendance records from the HR system for a specific date. Runs automatically at 01:00 daily.</p>
-        <div class="form-group">
-          <label class="label">Date to pull</label>
-          <input type="date" class="input" id="pullDate" value="${new Date().toISOString().slice(0,10)}">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Fetch attendance records from the HR system. Runs automatically at 01:00 daily.</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+          <div>
+            <label class="label" style="font-size:11px">From</label>
+            <input type="date" class="input" id="pullFrom" style="width:auto">
+          </div>
+          <div>
+            <label class="label" style="font-size:11px">To <span style="color:var(--text3)">(optional)</span></label>
+            <input type="date" class="input" id="pullTo" style="width:auto">
+          </div>
+          <div style="align-self:flex-end">
+            <button class="btn btn-ghost btn-sm" onclick="setQuick('pull','yesterday')">Yesterday</button>
+            <button class="btn btn-ghost btn-sm" onclick="setQuick('pull','week')">Last 7 days</button>
+          </div>
         </div>
         <button class="btn btn-primary" id="pullBtn" onclick="triggerPull()">Pull now</button>
         <div id="pullResult" style="margin-top:12px"></div>
@@ -34,9 +44,20 @@
       <div class="card-header"><span class="card-title">🔍 Detect missing records</span></div>
       <div class="card-body">
         <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Scan for employees with missing clock-in or clock-out and notify them. Runs automatically at 23:45 daily.</p>
-        <div class="form-group">
-          <label class="label">Date to check</label>
-          <input type="date" class="input" id="detectDate" value="${new Date().toISOString().slice(0,10)}">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+          <div>
+            <label class="label" style="font-size:11px">From</label>
+            <input type="date" class="input" id="detectFrom" style="width:auto">
+          </div>
+          <div>
+            <label class="label" style="font-size:11px">To <span style="color:var(--text3)">(optional)</span></label>
+            <input type="date" class="input" id="detectTo" style="width:auto">
+          </div>
+          <div style="align-self:flex-end">
+            <button class="btn btn-ghost btn-sm" onclick="setQuick('detect','yesterday')">Yesterday</button>
+            <button class="btn btn-ghost btn-sm" onclick="setQuick('detect','week')">Last 7 days</button>
+            <button class="btn btn-ghost btn-sm" onclick="setQuick('detect','month')">Last 30 days</button>
+          </div>
         </div>
         <button class="btn btn-ghost" id="detectBtn" onclick="triggerDetect()">Detect now</button>
         <div id="detectResult" style="margin-top:12px"></div>
@@ -78,21 +99,40 @@
 <script src="/js/app.js"></script>
 <script>
 const todayISO = new Date().toISOString().slice(0,10);
-document.getElementById('pullDate').value   = todayISO;
-document.getElementById('detectDate').value = todayISO;
+const yesterdayISO = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+document.getElementById('pullFrom').value   = todayISO;
+document.getElementById('detectFrom').value = yesterdayISO;
+document.getElementById('detectTo').value   = todayISO;
+
+function setQuick(type, preset) {
+  const today = new Date();
+  const fmt = d => d.toISOString().slice(0,10);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const weekAgo   = new Date(today); weekAgo.setDate(today.getDate() - 6);
+  const monthAgo  = new Date(today); monthAgo.setDate(today.getDate() - 29);
+  const fromEl = document.getElementById(type + 'From');
+  const toEl   = document.getElementById(type + 'To');
+  if (preset === 'yesterday') { fromEl.value = fmt(yesterday); toEl.value = ''; }
+  if (preset === 'week')      { fromEl.value = fmt(weekAgo);   toEl.value = fmt(yesterday); }
+  if (preset === 'month')     { fromEl.value = fmt(monthAgo);  toEl.value = fmt(yesterday); }
+}
 
 (async () => {
   await buildSidebar('hr-sync');
-  document.getElementById('adapterMode').textContent = '${process.env.HR_ADAPTER || "mock"}';
   await loadSyncLog();
 })();
 
 async function triggerPull() {
   const btn = document.getElementById('pullBtn');
   btn.disabled=true; btn.textContent='Pulling…';
+  const from = document.getElementById('pullFrom').value;
+  const to   = document.getElementById('pullTo').value;
   try {
-    const r = await api('POST','/api/hr/pull',{ date: document.getElementById('pullDate').value });
-    document.getElementById('pullResult').innerHTML = resultBadge(r.status, `${r.records_affected} records imported`);
+    const body = { date_from: from };
+    if (to) body.date_to = to;
+    const r = await api('POST','/api/hr/pull', body);
+    const days = to ? ` (${from} → ${to})` : ` (${from})`;
+    document.getElementById('pullResult').innerHTML = resultBadge(r.status, `${r.records_affected} records imported${days}`);
     await loadSyncLog();
   } catch(e) { document.getElementById('pullResult').innerHTML = resultBadge('failed', e.message); }
   btn.disabled=false; btn.textContent='Pull now';
@@ -101,9 +141,16 @@ async function triggerPull() {
 async function triggerDetect() {
   const btn = document.getElementById('detectBtn');
   btn.disabled=true; btn.textContent='Detecting…';
+  const from = document.getElementById('detectFrom').value;
+  const to   = document.getElementById('detectTo').value;
   try {
-    const r = await api('POST','/api/hr/detect-missing',{ date: document.getElementById('detectDate').value });
-    document.getElementById('detectResult').innerHTML = resultBadge('ok', `${r.notified} employees notified`);
+    const body = { date_from: from };
+    if (to) body.date_to = to;
+    const r = await api('POST','/api/hr/detect-missing', body);
+    const dayCount = r.dates || (to ? '?' : 1);
+    const days = to ? ` across ${dayCount} day${dayCount !== 1 ? 's' : ''}` : ` for ${from}`;
+    document.getElementById('detectResult').innerHTML = resultBadge('ok', `${r.notified} notifications sent${days}`);
+    await loadSyncLog();
   } catch(e) { document.getElementById('detectResult').innerHTML = resultBadge('failed', e.message); }
   btn.disabled=false; btn.textContent='Detect now';
 }

@@ -14,52 +14,42 @@ const adapter  = require('../integrations/hrAdapter');
 const { notifyMissingRecord, notifyHODApproval, notifyDecision } = require('./email');
 
 // ── Pull attendance from HR system for a given date ──────────────────────────
-async function pullFromHR(date = todayStr()) {
-  const log = { direction: 'pull', status: 'ok', records_affected: 0, detail: `date=${date}` };
+async function pullFromHR(date = todayStr(), dateTo = null) {
+  // Build list of dates to pull — single date or range
+  const dates = dateTo ? getDateRange(date, dateTo) : [date];
+  const log = { direction: 'pull', status: 'ok', records_affected: 0, detail: dates.length > 1 ? `range=${date}→${dateTo}` : `date=${date}` };
+
   try {
-    // Get all active employees
     const employees = await db('users')
       .whereIn('role', ['EMPLOYEE', 'HOD'])
       .where({ is_active: true })
       .select('id', 'staff_id');
 
     const staffIds = employees.map(e => e.staff_id);
-    const records  = await adapter.fetchAttendance(date, staffIds);
+    const empMap   = Object.fromEntries(employees.map(e => [e.staff_id, e.id]));
 
-    // Build a map for quick lookup
-    const empMap = Object.fromEntries(employees.map(e => [e.staff_id, e.id]));
-
-    for (const r of records) {
-      const userId = empMap[r.staffId];
-      if (!userId) continue;
-
-      await db('attendance')
-        .insert({
-          user_id:      userId,
-          date:         r.date,
-          clock_in:     r.clockIn  || null,
-          clock_out:    r.clockOut || null,
-          source:       'HR_SYSTEM',
-          hr_record_id: r.hrRecordId || null,
-          synced_at:    new Date(),
-        })
-        .onConflict(['user_id', 'date'])
-        .merge({
-          // Only overwrite if not already corrected by HOD
-          clock_in:     db.raw(`CASE WHEN attendance.source = 'CORRECTED' THEN attendance.clock_in ELSE EXCLUDED.clock_in END`),
-          clock_out:    db.raw(`CASE WHEN attendance.source = 'CORRECTED' THEN attendance.clock_out ELSE EXCLUDED.clock_out END`),
-          hr_record_id: r.hrRecordId || null,
-          synced_at:    new Date(),
-          updated_at:   new Date(),
-        });
-
-      log.records_affected++;
+    for (const d of dates) {
+      const records = await adapter.fetchAttendance(d, staffIds);
+      for (const r of records) {
+        const userId = empMap[r.staffId];
+        if (!userId) continue;
+        await db('attendance')
+          .insert({ user_id: userId, date: r.date, clock_in: r.clockIn || null, clock_out: r.clockOut || null, source: 'HR_SYSTEM', hr_record_id: r.hrRecordId || null, synced_at: new Date() })
+          .onConflict(['user_id', 'date'])
+          .merge({
+            clock_in:     db.raw(`CASE WHEN attendance.source = 'CORRECTED' THEN attendance.clock_in ELSE EXCLUDED.clock_in END`),
+            clock_out:    db.raw(`CASE WHEN attendance.source = 'CORRECTED' THEN attendance.clock_out ELSE EXCLUDED.clock_out END`),
+            hr_record_id: r.hrRecordId || null,
+            synced_at:    new Date(),
+            updated_at:   new Date(),
+          });
+        log.records_affected++;
+      }
     }
-
-    console.log(`[SYNC] Pulled ${log.records_affected} records from HR for ${date}`);
+    console.log(`[SYNC] Pulled ${log.records_affected} records from HR (${dates.length} day${dates.length > 1 ? 's' : ''})`);
   } catch (e) {
-    log.status  = 'failed';
-    log.error   = e.message;
+    log.status = 'failed';
+    log.error  = e.message;
     console.error('[SYNC] pullFromHR failed:', e.message);
   }
 
@@ -68,8 +58,9 @@ async function pullFromHR(date = todayStr()) {
 }
 
 // ── Detect missing records and notify ────────────────────────────────────────
-async function detectMissing(date = todayStr()) {
-  console.log(`[SYNC] Detecting missing records for ${date}…`);
+async function detectMissing(date = todayStr(), dateTo = null) {
+  const dates = dateTo ? getDateRange(date, dateTo) : [date];
+  console.log(`[SYNC] Detecting missing records for ${dates.length} day${dates.length > 1 ? 's' : ''} (${date}${dateTo ? ' → ' + dateTo : ''})…`);
   let notified = 0;
 
   try {
@@ -77,66 +68,66 @@ async function detectMissing(date = todayStr()) {
       .whereIn('role', ['EMPLOYEE', 'HOD'])
       .where({ is_active: true });
 
+    for (const d of dates) {
     for (const emp of employees) {
       const att = await db('attendance')
-        .where({ user_id: emp.id, date })
+        .where({ user_id: emp.id, date: d })
         .first();
 
-      // Skip if fully complete or source is corrected
+      // Skip if fully complete
       if (att?.clock_in && att?.clock_out) continue;
 
       const missingField = att?.clock_in ? 'clock_out' : 'clock_in';
 
-      // Skip if already notified today for this record
+      // Skip if already notified for this record
       const alreadyNotified = await db('notifications')
         .where({ user_id: emp.id, type: 'missing_record', ref_id: att?.id || null })
-        .where('created_at', '>=', date)
+        .where('created_at', '>=', d)
         .first();
       if (alreadyNotified) continue;
 
-      // Create a placeholder attendance row if none exists (absent)
+      // Create a placeholder attendance row if none exists
       let attRow = att;
       if (!attRow) {
         [attRow] = await db('attendance')
-          .insert({ user_id: emp.id, date, source: 'HR_SYSTEM', synced_at: new Date() })
+          .insert({ user_id: emp.id, date: d, source: 'HR_SYSTEM', synced_at: new Date() })
           .onConflict(['user_id', 'date']).ignore()
           .returning('*');
-        if (!attRow) attRow = await db('attendance').where({ user_id: emp.id, date }).first();
+        if (!attRow) attRow = await db('attendance').where({ user_id: emp.id, date: d }).first();
       }
 
-      // In-app notification → employee
+      // Notify employee
       await db('notifications').insert({
         user_id: emp.id,
         type:    'missing_record',
-        title:   `Missing ${missingField.replace('_', '-')} — ${formatDate(date)}`,
-        message: `Your ${missingField.replace('_', ' ')} was not recorded for ${formatDate(date)}. Please submit a correction request within 48 hours to avoid payroll impact.`,
+        title:   `Missing ${missingField.replace('_', '-')} — ${formatDate(d)}`,
+        message: `Your ${missingField.replace('_', ' ')} was not recorded for ${formatDate(d)}. Please submit a correction request within 48 hours to avoid payroll impact.`,
         ref_id:  attRow?.id || null,
       });
 
-      // In-app notification → HOD
+      // Notify HOD
       const hod = emp.hod_id ? await db('users').where({ id: emp.hod_id }).first() : null;
       if (hod) {
         await db('notifications').insert({
           user_id: hod.id,
           type:    'team_missing_record',
           title:   `Missing record — ${emp.name}`,
-          message: `${emp.name} (${emp.staff_id}) has a missing ${missingField.replace('_', ' ')} on ${formatDate(date)}. They have been notified to submit a correction.`,
+          message: `${emp.name} (${emp.staff_id}) has a missing ${missingField.replace('_', ' ')} on ${formatDate(d)}. They have been notified to submit a correction.`,
           ref_id:  attRow?.id || null,
         });
       }
 
-      // Email employee + HOD
-      try { await notifyMissingRecord(emp, date, hod); } catch (e) { console.error(`[SYNC] Email error:`, e.message); }
-
+      try { await notifyMissingRecord(emp, d, hod); } catch (e) { console.error(`[SYNC] Email error:`, e.message); }
       notified++;
     }
+    } // end date loop
 
-    console.log(`[SYNC] Missing detection done — ${notified} employees notified.`);
+    console.log(`[SYNC] Missing detection done — ${notified} notifications sent.`);
   } catch (e) {
     console.error('[SYNC] detectMissing error:', e.message);
   }
 
-  return { notified };
+  return { notified, dates: dates.length };
 }
 
 // ── Push approved correction back to HR system ───────────────────────────────
@@ -236,6 +227,17 @@ async function retryFailedPushes() {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+function getDateRange(from, to) {
+  const dates = [];
+  const d = new Date(from + 'T00:00:00');
+  const end = new Date(to + 'T00:00:00');
+  while (d <= end) {
+    dates.push(d.toISOString().slice(0, 10));
+    d.setDate(d.getDate() + 1);
+  }
+  return dates;
+}
 function formatDate(iso) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-MY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }

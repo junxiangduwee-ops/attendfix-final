@@ -27,22 +27,28 @@ function parseFile(buffer, mimetype, originalname) {
   return parse(buffer.toString('utf8'), { columns: true, skip_empty_lines: true, trim: true });
 }
 
-// Manual: trigger HR attendance pull for a specific date
+// Manual: trigger HR attendance pull — single date or range
 router.post('/api/hr/pull', requireAuth, requireRole(...HR_ROLES), async (req, res) => {
   try {
-    const { date } = req.body;
-    const target = date || new Date().toISOString().slice(0, 10);
-    const result = await pullFromHR(target);
+    const today  = new Date().toISOString().slice(0, 10);
+    const { date, date_from, date_to } = req.body;
+    const from = date_from || date || today;
+    const to   = date_to   || null;
+    if (to && to < from) return res.status(400).json({ error: 'date_to must be after date_from.' });
+    const result = await pullFromHR(from, to);
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Manual: trigger missing-record detection
+// Manual: trigger missing-record detection — single date or range
 router.post('/api/hr/detect-missing', requireAuth, requireRole(...HR_ROLES), async (req, res) => {
   try {
-    const { date } = req.body;
-    const target = date || new Date().toISOString().slice(0, 10);
-    const result = await detectMissing(target);
+    const today  = new Date().toISOString().slice(0, 10);
+    const { date, date_from, date_to } = req.body;
+    const from = date_from || date || today;
+    const to   = date_to   || null;
+    if (to && to < from) return res.status(400).json({ error: 'date_to must be after date_from.' });
+    const result = await detectMissing(from, to);
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
