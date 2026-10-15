@@ -1,34 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="UTF-8"><link rel="icon" type="image/png" href="/favicon.png"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AttendFix — Login</title>
 <link rel="stylesheet" href="/css/app.css">
 <style>
 body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg)}
 .login-wrap{width:100%;max-width:400px;padding:24px}
-.login-logo{text-align:center;margin-bottom:32px}
-.login-logo-icon{width:52px;height:52px;border-radius:14px;background:var(--blue);display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px}
-.login-logo-icon svg{width:26px;height:26px;stroke:#fff;fill:none;stroke-width:2}
-.login-title{font-size:24px;font-weight:800;letter-spacing:-.5px;margin-bottom:4px}
-.login-sub{font-size:13px;color:var(--text2)}
-.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;box-shadow:0 4px 24px rgba(16,24,40,.08)}
-.demo-creds{background:var(--blue-l);border:1px solid #84adff;border-radius:10px;padding:14px;margin-bottom:20px;font-size:12px}
-.demo-creds strong{display:block;color:var(--blue-d);margin-bottom:6px}
-.demo-row{display:flex;justify-content:space-between;margin-bottom:3px;color:var(--text2)}
+.login-logo{text-align:center;margin-bottom:28px}
+.login-logo img{width:80px;height:80px;object-fit:contain;margin-bottom:12px;filter:drop-shadow(0 4px 12px rgba(0,0,0,.15))}
+.login-title{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:4px;color:var(--text)}
+.login-sub{font-size:13px;color:var(--text3)}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;box-shadow:var(--sh-lg)}
+.demo-creds{background:var(--blue-l);border:1px solid #C7D0FF;border-radius:10px;padding:14px;margin-bottom:20px;font-size:12px}
+.demo-creds strong{display:block;color:var(--blue-d);margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.demo-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;color:var(--text2)}
 .demo-row:last-child{margin-bottom:0}
-.demo-row b{color:var(--text);font-family:monospace}
+.demo-row b{color:var(--text);font-family:monospace;font-size:11px}
 .err-box{background:var(--red-l);border:1px solid #fda29b;border-radius:8px;padding:10px 12px;font-size:13px;color:var(--red-d);margin-bottom:14px;display:none}
 </style>
 </head>
 <body>
 <div class="login-wrap">
   <div class="login-logo">
-    <div class="login-logo-icon">
-      <svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-    </div>
+    <img src="/mr-diy-logo.png" alt="MR DIY Logo">
     <div class="login-title">AttendFix</div>
-    <div class="login-sub">HR Attendance Correction System</div>
+    <div class="login-sub">MR DIY · HR Attendance Correction System</div>
   </div>
   <div class="login-card">
     <div class="demo-creds">
@@ -40,7 +37,7 @@ body{display:flex;align-items:center;justify-content:center;min-height:100vh;bac
     <div class="err-box" id="errBox"></div>
     <div class="form-group">
       <label class="label">Email address</label>
-      <input type="email" class="input" id="email" placeholder="you@company.com" autocomplete="email">
+      <input type="email" class="input" id="email" placeholder="you@mrdiy.com" autocomplete="email">
     </div>
     <div class="form-group">
       <label class="label">Password</label>

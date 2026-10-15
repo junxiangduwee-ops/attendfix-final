@@ -69,8 +69,8 @@ async function buildSidebar(activePage) {
 
   document.getElementById('sidebar').innerHTML = `
     <div class="sb-logo">
-      <div class="sb-logo-icon"><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>
-      <div><div class="sb-logo-name">AttendFix</div><div class="sb-logo-sub">v1.0</div></div>
+      <div class="sb-logo-icon" style="background:#FFD700;padding:2px"><img src="/mr-diy-icon.png" width="30" height="30" style="object-fit:contain;display:block"></div>
+      <div><div class="sb-logo-name">AttendFix</div><div class="sb-logo-sub">MR DIY · HR System</div></div>
     </div>
     <div class="sb-user-card">
       <div class="${avatarClass}">${initials}</div>
