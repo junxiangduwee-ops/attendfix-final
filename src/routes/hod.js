@@ -91,6 +91,16 @@ router.post('/api/hod/corrections/:id/approve', requireAuth, requireRole(...APPR
     // (don't block the response — retry job handles failures)
     pushCorrectionToHR(cr.id).catch(e => console.error('[HOD] HR push error:', e.message));
 
+    // Mark HOD's approval_needed notification as read
+    await db('notifications')
+      .where({ user_id: req.session.userId, type: 'approval_needed', ref_id: cr.id })
+      .update({ is_read: true });
+
+    // Mark employee's missing_record notification as read (it's been resolved)
+    await db('notifications')
+      .where({ user_id: cr.user_id, type: 'missing_record', ref_id: cr.attendance_id })
+      .update({ is_read: true });
+
     // In-app notification → employee
     await db('notifications').insert({
       user_id: cr.user_id, type: 'request_approved',
@@ -99,7 +109,7 @@ router.post('/api/hod/corrections/:id/approve', requireAuth, requireRole(...APPR
       ref_id:  cr.id,
     });
 
-    // In-app confirmation → HOD (so it appears in their notification log)
+    // In-app confirmation → HOD
     await db('notifications').insert({
       user_id: req.session.userId, type: 'decision_logged',
       title:   `Correction approved — ${cr.employee_name}`,
@@ -133,11 +143,16 @@ router.post('/api/hod/corrections/:id/reject', requireAuth, requireRole(...APPRO
       hod_remarks: hodRemarks, decided_at: new Date(), updated_at: new Date(),
     });
 
-    // In-app notification → employee
+    // Mark HOD's approval_needed notification as read
+    await db('notifications')
+      .where({ user_id: req.session.userId, type: 'approval_needed', ref_id: cr.id })
+      .update({ is_read: true });
+
+    // In-app notification → employee (rejected = they need to resubmit, stays unread)
     await db('notifications').insert({
       user_id: cr.user_id, type: 'request_rejected',
       title:   'Correction rejected',
-      message: `Your ${cr.field_missing.replace('_',' ')} correction for ${cr.date} was rejected. Reason: ${hodRemarks}`,
+      message: `Your ${cr.field_missing.replace('_',' ')} correction for ${cr.date} was rejected. Reason: ${hodRemarks}. You may resubmit with more details.`,
       ref_id:  cr.id,
     });
 
@@ -164,7 +179,17 @@ router.get('/api/hod/team/attendance', requireAuth, requireRole(...HOD_ROLES), a
     const { from, to } = req.query;
     let q = db('attendance as a')
       .join('users as u', 'u.id', 'a.user_id')
-      .select('a.*', 'u.name', 'u.staff_id')
+      .select(
+        db.raw('a.id          as att_id'),
+        db.raw('a.user_id     as user_id'),
+        db.raw('a.date        as date'),
+        db.raw('a.clock_in    as clock_in'),
+        db.raw('a.clock_out   as clock_out'),
+        db.raw('a.source      as source'),
+        db.raw('u.id          as id'),       // user id — used for grouping in frontend
+        db.raw('u.name        as name'),
+        db.raw('u.staff_id    as staff_id'),
+      )
       .where('u.hod_id', req.session.userId)
       .where('u.is_active', true);
     if (from) q = q.where('a.date', '>=', from);

@@ -18,7 +18,8 @@ router.get('/api/me', requireAuth, async (req, res) => {
 
 router.get('/api/notifications', requireAuth, async (req, res) => {
   try {
-    const rows = await db('notifications').where({ user_id: req.session.userId }).orderBy('created_at','desc').limit(25);
+    const limit = parseInt(req.query.limit) || 25;
+    const rows = await db('notifications').where({ user_id: req.session.userId }).orderBy('created_at','desc').limit(limit);
     res.json(rows);
   } catch (e) { res.status(500).json({ error: 'Server error.' }); }
 });

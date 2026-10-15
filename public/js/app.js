@@ -139,7 +139,95 @@ async function buildSidebar(activePage) {
     } catch {}
   }
 
+  // ── Inject topbar with bell ───────────────────────────────────────────────
+  const topbar = document.createElement('div');
+  topbar.className = 'topbar';
+  topbar.innerHTML = `
+    <span class="topbar-title">${user.name}</span>
+    <div style="position:relative">
+      <button class="notif-btn" id="bellBtn" onclick="toggleNotif()" title="Notifications">
+        <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>
+        <span class="notif-count" id="bellCount"></span>
+      </button>
+      <div class="notif-dropdown" id="notifDropdown">
+        <div class="notif-header">
+          <span class="notif-header-title">Notifications</span>
+          <span class="notif-mark-read" onclick="markAllRead()">Mark all read</span>
+        </div>
+        <div class="notif-list" id="notifList"><div class="notif-empty">Loading…</div></div>
+      </div>
+    </div>`;
+
+  // Insert topbar before page-body
+  const mainContent = document.querySelector('.main-content');
+  if (mainContent) mainContent.prepend(topbar);
+
+  // Update bell count
+  updateBellCount(user.unreadCount || 0);
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#bellBtn') && !e.target.closest('#notifDropdown')) {
+      document.getElementById('notifDropdown')?.classList.remove('open');
+    }
+  });
+
   return user;
+}
+
+function updateBellCount(n) {
+  const el = document.getElementById('bellCount');
+  if (!el) return;
+  if (n > 0) { el.textContent = n > 99 ? '99+' : n; el.style.display = 'block'; }
+  else { el.style.display = 'none'; }
+}
+
+function toggleNotif() {
+  const dd = document.getElementById('notifDropdown');
+  const isOpen = dd.classList.contains('open');
+  dd.classList.toggle('open');
+  if (!isOpen) loadNotifDropdown();
+}
+
+async function loadNotifDropdown() {
+  const list = document.getElementById('notifList');
+  list.innerHTML = '<div class="notif-empty">Loading…</div>';
+  try {
+    const notifs = await api('GET', '/api/notifications?limit=15');
+    if (!notifs.length) { list.innerHTML = '<div class="notif-empty">🎉 All caught up!</div>'; return; }
+
+    const iconMap = {
+      missing_record:      { cls:'warn', emoji:'⚠️' },
+      request_submitted:   { cls:'info', emoji:'📋' },
+      request_approved:    { cls:'ok',   emoji:'✅' },
+      request_rejected:    { cls:'bad',  emoji:'❌' },
+      approval_needed:     { cls:'warn', emoji:'⏳' },
+      team_missing_record: { cls:'warn', emoji:'👥' },
+      decision_logged:     { cls:'info', emoji:'📝' },
+    };
+
+    list.innerHTML = notifs.map(n => {
+      const ic = iconMap[n.type] || { cls:'info', emoji:'🔔' };
+      return `<div class="notif-item ${n.is_read ? '' : 'unread'}">
+        <div class="notif-icon ${ic.cls}">${ic.emoji}</div>
+        <div class="notif-content">
+          <div class="notif-item-title">${n.title}</div>
+          <div class="notif-item-msg">${n.message}</div>
+          <div class="notif-item-time">${timeAgo(n.created_at)}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Mark all as read when opened
+    await api('POST', '/api/notifications/read-all');
+    updateBellCount(0);
+  } catch(e) { list.innerHTML = '<div class="notif-empty">Could not load notifications.</div>'; }
+}
+
+async function markAllRead() {
+  await api('POST', '/api/notifications/read-all');
+  updateBellCount(0);
+  loadNotifDropdown();
 }
 
 // Global modal helpers

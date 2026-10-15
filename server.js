@@ -10,7 +10,7 @@ async function seedUsers(db) {
 
   // ── Departments & HODs ────────────────────────────────────────────────────
   const depts = [
-    { dept:'Operations',      name:'Rashid Hamdan',     email:'rashid.hamdan@mrdiy.com',     staff_id:'H-00101', pw:'hod123' },
+    { dept:'Operations',      name:'Rashid Hamdan',     email:'hod@mrdiy.com',     staff_id:'H-00101', pw:'hod123' },
     { dept:'Retail',          name:'Fauziah Ismail',    email:'fauziah.ismail@mrdiy.com',    staff_id:'H-00102', pw:'hod123' },
     { dept:'Logistics',       name:'Zulkifli Nordin',   email:'zulkifli.nordin@mrdiy.com',   staff_id:'H-00103', pw:'hod123' },
     { dept:'Finance',         name:'Lim Bee Ching',     email:'lim.beeching@mrdiy.com',      staff_id:'H-00104', pw:'hod123' },
@@ -27,7 +27,7 @@ async function seedUsers(db) {
   const employees = [
     // Operations
     { name:'Ahmad Razif Bin Bakar',   email:'ahmad.razif@mrdiy.com',    staff_id:'E-04291', dept:'Operations',      pw:'emp123' },
-    { name:'Mohd Hafiz Bin Yusof',    email:'mohd.hafiz@mrdiy.com',     staff_id:'E-04292', dept:'Operations',      pw:'emp123' },
+    { name:'Mohd Hafiz Bin Yusof',    email:'employee@mrdiy.com',     staff_id:'E-04292', dept:'Operations',      pw:'emp123' },
     { name:'Nurul Huda Bt Ramlan',    email:'nurul.huda@mrdiy.com',     staff_id:'E-04293', dept:'Operations',      pw:'emp123' },
     { name:'Azri Bin Othman',         email:'azri.othman@mrdiy.com',    staff_id:'E-04294', dept:'Operations',      pw:'emp123' },
     { name:'Saleha Bt Zainal',        email:'saleha.zainal@mrdiy.com',  staff_id:'E-04295', dept:'Operations',      pw:'emp123' },

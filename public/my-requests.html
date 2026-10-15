@@ -1,36 +1,111 @@
 <!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><link rel="icon" type="image/png" href="/favicon.png"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>My Requests — AttendFix</title><link rel="stylesheet" href="/css/app.css"></head>
+<title>My Requests — AttendFix</title><link rel="stylesheet" href="/css/app.css">
+<style>
+tr.clickable{cursor:pointer}
+tr.clickable:hover td{background:var(--blue-l)}
+.detail-row{display:flex;gap:8px;margin-bottom:12px}
+.detail-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);min-width:110px;padding-top:2px}
+.detail-val{font-size:13px;color:var(--text);line-height:1.6}
+.detail-sep{border:none;border-top:1px solid var(--border);margin:14px 0}
+</style>
+</head>
 <body>
 <div class="app"><nav class="sidebar" id="sidebar"></nav>
 <div class="main-content"><div class="page-body">
   <div class="page-title">My requests</div>
-  <div class="page-sub">History of all your correction submissions</div>
+  <div class="page-sub">Click any row to view full details</div>
   <div class="card"><div class="card-body" style="padding:0"><div id="root"><div class="loading">Loading…</div></div></div></div>
 </div></div></div>
+
+<!-- Detail modal -->
+<div class="overlay" id="detailModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="modalTitle">Request Details</div>
+      <div class="modal-sub" id="modalSub"></div>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('detailModal')">Close</button>
+    </div>
+  </div>
+</div>
+
 <script src="/js/app.js"></script>
 <script>
+let allReqs = [];
+
+function showDetail(id) {
+  const r = allReqs.find(x => x.id === id);
+  if (!r) return;
+
+  document.getElementById('modalTitle').textContent = `Correction — ${fmtDate(r.date)}`;
+  document.getElementById('modalSub').textContent = `${(r.field_missing||'').replace('_',' ')} · Submitted ${fmtDateTime(r.created_at)}`;
+
+  const statusColor = r.status === 'APPROVED' ? 'var(--green-d)' : r.status === 'REJECTED' ? 'var(--red-d)' : 'var(--amber-d)';
+
+  document.getElementById('modalBody').innerHTML = `
+    <div class="detail-row">
+      <span class="detail-lbl">Status</span>
+      <span class="detail-val">${statusBadge(r.status)}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-lbl">Date</span>
+      <span class="detail-val">${fmtDate(r.date)}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-lbl">Missing field</span>
+      <span class="detail-val">${(r.field_missing||'').replace('_',' ')}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-lbl">Proposed time</span>
+      <span class="detail-val" style="font-family:monospace;font-size:16px;font-weight:700;color:var(--blue)">${r.proposed_time||'—'}</span>
+    </div>
+    <hr class="detail-sep">
+    <div class="detail-row">
+      <span class="detail-lbl">Justification</span>
+      <span class="detail-val">${r.justification||'—'}</span>
+    </div>
+    ${r.evidence ? `<div class="detail-row"><span class="detail-lbl">Evidence</span><span class="detail-val">${r.evidence}</span></div>` : ''}
+    ${r.status !== 'PENDING' ? `
+    <hr class="detail-sep">
+    <div class="detail-row">
+      <span class="detail-lbl">Decided on</span>
+      <span class="detail-val">${r.decided_at ? fmtDateTime(r.decided_at) : '—'}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-lbl">HOD remarks</span>
+      <span class="detail-val" style="color:${statusColor}">${r.hod_remarks || (r.status === 'APPROVED' ? 'Approved — no remarks.' : '—')}</span>
+    </div>` : ''}`;
+
+  openModal('detailModal');
+}
+
+document.getElementById('detailModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal('detailModal');
+});
+
 (async () => {
   await buildSidebar('my-requests');
-  const reqs = await api('GET', '/api/corrections');
-  if (!reqs.length) {
-    document.getElementById('root').innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">No requests yet.<br>Go to <a href="/my-attendance">My Attendance</a> to submit a correction.</div></div>';
+  allReqs = await api('GET', '/api/corrections');
+  if (!allReqs.length) {
+    document.getElementById('root').innerHTML = '<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">No requests yet.<br>Go to <a href="/my-attendance">My Attendance</a> to submit a correction.</div></div>';
     return;
   }
   document.getElementById('root').innerHTML = `
     <table>
-      <thead><tr><th>Date</th><th>Missing</th><th>Proposed time</th><th>Justification</th><th>Submitted</th><th>HOD remarks</th><th>Status</th></tr></thead>
+      <thead><tr><th>Date</th><th>Missing</th><th>Proposed</th><th>Submitted</th><th>Status</th><th></th></tr></thead>
       <tbody>
-        ${reqs.map(r=>`
-          <tr>
+        ${allReqs.map(r => `
+          <tr class="clickable" onclick="showDetail(${r.id})">
             <td style="font-weight:600">${fmtDate(r.date)}</td>
             <td>${(r.field_missing||'').replace('_',' ')}</td>
             <td style="font-family:monospace;font-weight:600">${r.proposed_time||'—'}</td>
-            <td style="max-width:200px;font-size:12px;color:var(--text2)">${(r.justification||'').slice(0,60)}${(r.justification||'').length>60?'…':''}</td>
             <td style="font-size:12px;color:var(--text3)">${fmtDateTime(r.created_at)}</td>
-            <td style="font-size:12px;color:var(--text2)">${r.hod_remarks?`<em>${r.hod_remarks.slice(0,50)}…</em>`:'—'}</td>
             <td>${statusBadge(r.status)}</td>
+            <td style="color:var(--text3);font-size:12px">View →</td>
           </tr>`).join('')}
       </tbody>
     </table>`;
