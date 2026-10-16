@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><link rel="icon" type="image/png" href="/favicon.png"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>My Attendance — AttendFix</title>
+<title>AttendFix — MR DIY</title>
 <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
@@ -110,14 +110,11 @@ async function loadAttendance() {
   const rows = Array.isArray(data) ? data : (data.records || []);
   currentAtt = rows;
 
-  // Build a lookup: date+field → request status
-  // So we know if clock_in or clock_out for a given date already has a pending/approved request
+  // Build a lookup: date+field → { status, hod_remarks }
   const pendingMap = {};
   for (const req of allReqs) {
     const key = `${req.date}__${req.field_missing}`;
-    // Only block the button if PENDING — REJECTED means they can resubmit
-    if (req.status === 'PENDING') pendingMap[key] = 'PENDING';
-    if (req.status === 'APPROVED') pendingMap[key] = 'APPROVED';
+    pendingMap[key] = { status: req.status, remarks: req.hod_remarks || '' };
   }
 
   if (!rows.length) {
@@ -132,18 +129,34 @@ async function loadAttendance() {
         ${rows.map(r => {
           const needsFixIn  = !r.clock_in;
           const needsFixOut = !r.clock_out;
-          const inStatus    = pendingMap[`${r.date}__clock_in`];
-          const outStatus   = pendingMap[`${r.date}__clock_out`];
+          const inEntry  = pendingMap[`${r.date}__clock_in`]  || {};
+          const outEntry = pendingMap[`${r.date}__clock_out`] || {};
 
           const fixInBtn = needsFixIn
-            ? inStatus === 'PENDING'  ? `<span style="font-size:11px;color:var(--amber-d)">⏳ Pending</span>`
-            : inStatus === 'APPROVED' ? ''
+            ? inEntry.status === 'PENDING'
+              ? `<span style="font-size:11px;color:var(--amber-d)">⏳ Pending</span>`
+            : inEntry.status === 'APPROVED'
+              ? ''
+            : inEntry.status === 'REJECTED'
+              ? `<div style="display:flex;flex-direction:column;gap:3px">
+                   <span style="font-size:10px;color:var(--red-d);font-weight:600">❌ Rejected</span>
+                   ${inEntry.remarks ? `<span style="font-size:10px;color:var(--text3);max-width:140px;white-space:normal">${inEntry.remarks}</span>` : ''}
+                   <button class="btn btn-ghost btn-sm" onclick="openCorrection('${r.date}','','${r.clock_out||''}','clock_in')">Resubmit</button>
+                 </div>`
             : `<button class="btn btn-ghost btn-sm" onclick="openCorrection('${r.date}','','${r.clock_out||''}','clock_in')">Fix in</button>`
             : '';
 
           const fixOutBtn = needsFixOut
-            ? outStatus === 'PENDING'  ? `<span style="font-size:11px;color:var(--amber-d)">⏳ Pending</span>`
-            : outStatus === 'APPROVED' ? ''
+            ? outEntry.status === 'PENDING'
+              ? `<span style="font-size:11px;color:var(--amber-d)">⏳ Pending</span>`
+            : outEntry.status === 'APPROVED'
+              ? ''
+            : outEntry.status === 'REJECTED'
+              ? `<div style="display:flex;flex-direction:column;gap:3px">
+                   <span style="font-size:10px;color:var(--red-d);font-weight:600">❌ Rejected</span>
+                   ${outEntry.remarks ? `<span style="font-size:10px;color:var(--text3);max-width:140px;white-space:normal">${outEntry.remarks}</span>` : ''}
+                   <button class="btn btn-ghost btn-sm" onclick="openCorrection('${r.date}','${r.clock_in||''}','','clock_out')">Resubmit</button>
+                 </div>`
             : `<button class="btn btn-ghost btn-sm" onclick="openCorrection('${r.date}','${r.clock_in||''}','','clock_out')">Fix out</button>`
             : '';
 

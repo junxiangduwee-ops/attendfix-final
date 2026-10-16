@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><link rel="icon" type="image/png" href="/favicon.png"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HR Sync — AttendFix</title><link rel="stylesheet" href="/css/app.css"></head>
+<title>AttendFix — MR DIY</title><link rel="stylesheet" href="/css/app.css"></head>
 <body>
 <div class="app"><nav class="sidebar" id="sidebar"></nav>
 <div class="main-content"><div class="page-body">
@@ -170,14 +170,28 @@ async function uploadFile(input) {
   const file = input.files[0]; if (!file) return;
   const status = document.getElementById('csvStatus');
   const ext = file.name.split('.').pop().toLowerCase();
-  status.textContent = `Uploading ${ext.toUpperCase()}…`;
+  status.textContent = `Uploading ${ext.toUpperCase()}… (${(file.size/1024).toFixed(0)} KB)`;
   status.style.color = 'var(--text3)';
   const form = new FormData();
   form.append('file', file);
   try {
     const r = await fetch('/api/hr/import/csv', { method: 'POST', body: form });
+
+    // If session expired server returns redirect HTML — detect and handle
+    if (r.status === 401 || r.redirected) {
+      window.location.href = '/login';
+      return;
+    }
+
+    // Check content type before parsing JSON
+    const ct = r.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      throw new Error(`Server error (${r.status}) — try refreshing the page`);
+    }
+
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error);
+    if (!r.ok) throw new Error(d.error || 'Upload failed');
+
     status.style.color = d.skipped > 0 ? 'var(--amber-d)' : 'var(--green-d)';
     status.textContent = `✓ ${d.imported} imported${d.skipped > 0 ? `, ${d.skipped} skipped` : ''}`;
     if (d.errors && d.errors.length) {
@@ -186,7 +200,8 @@ async function uploadFile(input) {
     await loadSyncLog();
   } catch (e) {
     status.style.color = 'var(--red)';
-    status.textContent = '✗ ' + e.message;
+    status.textContent = '✗ ' + (e.message || 'Network error — check your connection');
+    console.error('Upload error:', e);
   }
   input.value = '';
 }
